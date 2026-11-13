@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CastViewer</string>
+    <string name="app_tagline">Receptor Local 60 FPS</string>
+    <string name="tv_badge_online">Pronto para espelhar</string>
+    <string name="tv_badge_connecting">Conectando…</string>
+    <string name="tv_badge_offline">Sem conexão Wi-Fi</string>
+
+    <!-- Apple TV / AirPlay Minimalist Waiting Screen -->
+    <string name="status_ready_prefix">Pronto para espelhar · %1$s</string>
+    <string name="hint_start_computer">Abra o CastViewer no computador para iniciar.</string>
+    <string name="qr_code_desc">Código QR de pareamento CastViewer</string>
+
+    <!-- TV Streaming Overlay & Remote Instructions -->
+    <string name="instruction_back_remote">Pressione VOLTAR no controle remoto para sair</string>
+    <string name="instruction_back_disconnect">Voltar para sair</string>
+    <string name="status_streaming_pill_prefix">CastViewer • </string>
+    <string name="waiting_connection">Aguardando transmissão na rede local…</string>
+    <string name="network_disconnected">Sem conexão Wi-Fi ou Ethernet detectada</string>
+</resources>

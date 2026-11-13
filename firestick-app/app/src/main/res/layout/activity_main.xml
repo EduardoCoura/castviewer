@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/rootContainer"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_tv_gradient"
+    android:keepScreenOn="true">
+
+    <!-- 1. FULLSCREEN WEBRTC HARDWARE RENDERER (Edge-to-Edge) -->
+    <org.webrtc.SurfaceViewRenderer
+        android:id="@+id/surfaceViewRenderer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:keepScreenOn="true"
+        android:visibility="gone"
+        tools:visibility="gone" />
+
+    <!-- 2. STREAMING HUD OVERLAY (Top-Left Sleek Pill, Auto-Fading after 3.5s) -->
+    <LinearLayout
+        android:id="@+id/streamingHudLayout"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="36dp"
+        android:layout_marginTop="28dp"
+        android:background="@drawable/bg_hud_overlay"
+        android:elevation="14dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <!-- Live pulsing green dot -->
+        <View
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:background="@drawable/bg_dot_live" />
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_marginStart="10dp"
+            android:contentDescription="@null"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_castviewer_logo_official" />
+
+        <TextView
+            android:id="@+id/tvHudText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:fontFamily="@font/barlow_bold_italic"
+            android:textStyle="bold|italic"
+            android:textColor="@color/cv_text_primary"
+            android:textSize="14sp"
+            tools:text="CastViewer • PC Sala • Voltar para sair" />
+
+        <!-- Indicator kept hidden (no longer BETA) -->
+        <TextView
+            android:id="@+id/tvHudBetaBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:background="@drawable/bg_beta_badge"
+            android:fontFamily="@font/barlow_condensed"
+            android:letterSpacing="0.08"
+            android:text="AO VIVO"
+            android:textColor="@color/cv_accent_hover"
+            android:textSize="10sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- 2b. STREAMING CLOCK OVERLAY (corner chosen by sender app; hidden unless enabled) -->
+    <TextView
+        android:id="@+id/tvStreamClock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="36dp"
+        android:background="@drawable/bg_hud_overlay"
+        android:elevation="12dp"
+        android:fontFamily="@font/barlow_condensed"
+        android:fontFeatureSettings="tnum"
+        android:letterSpacing="0.04"
+        android:paddingStart="16dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="6dp"
+        android:textColor="@color/cv_text_primary"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        tools:text="01:10:46"
+        tools:visibility="gone" />
+
+    <!-- 3. APPLE TV / AIRPLAY MINIMALIST WAITING SCREEN (10-foot UI, Negative Space Canvas) -->
+    <FrameLayout
+        android:id="@+id/waitingContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="visible"
+        tools:visibility="visible">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="72dp"
+            android:paddingTop="48dp"
+            android:paddingEnd="72dp"
+            android:paddingBottom="48dp">
+
+            <!-- LEFT ZONE: Open Editorial Typography (NO card box, pure floating canvas) -->
+            <LinearLayout
+                android:id="@+id/leftEditorialZone"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="48dp"
+                android:layout_weight="1.25"
+                android:orientation="vertical">
+
+                <!-- Compact CastViewer geometric emblem + wordmark -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:id="@+id/ivBrandLogo"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:contentDescription="@null"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_castviewer_logo_official" />
+
+                    <TextView
+                        android:id="@+id/tvBrandWordmark"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:fontFamily="@font/barlow_bold_italic"
+                        android:textStyle="bold|italic"
+                        android:letterSpacing="0.04"
+                        android:text="@string/app_name"
+                        android:textColor="@color/cv_status_muted"
+                        android:textSize="17sp" />
+                </LinearLayout>
+
+                <!-- Large, bold 10-foot device title (38sp, #F5F5F7, barlow_bold_italic, letter-spacing -0.02) -->
+                <TextView
+                    android:id="@+id/tvDeviceName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:fontFamily="@font/barlow_bold_italic"
+                    android:textStyle="bold|italic"
+                    android:letterSpacing="-0.02"
+                    android:textColor="@color/cv_apple_white"
+                    android:textSize="38sp"
+                    tools:text="Fire TV Stick 4K" />
+
+                <!-- Single quiet status row: crisp 8dp green dot (#22C55E) + status text (18sp, barlow_condensed) -->
+                <LinearLayout
+                    android:id="@+id/statusRowLayout"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <View
+                        android:id="@+id/dotStatus"
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:background="@drawable/bg_dot_live" />
+
+                    <TextView
+                        android:id="@+id/tvStatusRow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:fontFamily="@font/barlow_condensed"
+                        android:textColor="@color/cv_status_muted"
+                        android:textSize="18sp"
+                        tools:text="Pronto para espelhar" />
+                </LinearLayout>
+
+                <!-- One short subtle hint below (14sp, #63636E, barlow_condensed) -->
+                <TextView
+                    android:id="@+id/tvSubtleHint"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:fontFamily="@font/barlow_condensed"
+                    android:text="@string/hint_start_computer"
+                    android:textColor="@color/cv_hint_subtle"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- RIGHT ZONE: Floating QR Tile -->
+            <LinearLayout
+                android:id="@+id/rightQrZone"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="0.85"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <!-- Crisp white rounded-square QR tile (18dp corners, clean padding, subtle elevation) -->
+                <FrameLayout
+                    android:id="@+id/qrTileContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_qr_frame"
+                    android:elevation="10dp"
+                    android:padding="16dp">
+
+                    <ImageView
+                        android:id="@+id/ivQrCode"
+                        android:layout_width="190dp"
+                        android:layout_height="190dp"
+                        android:contentDescription="@string/qr_code_desc"
+                        android:scaleType="fitCenter" />
+                </FrameLayout>
+
+                <!-- Hidden / Gone ws address under QR code -->
+                <TextView
+                    android:id="@+id/tvWsAddress"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:fontFamily="@font/barlow_condensed"
+                    android:gravity="center"
+                    android:textColor="@color/cv_qr_mono"
+                    android:textSize="13sp"
+                    android:visibility="gone"
+                    tools:text="" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Tiny, quiet corner quick-guide at the bottom -->
+        <TextView
+            android:id="@+id/tvQuickGuide"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|start"
+            android:layout_marginStart="72dp"
+            android:layout_marginEnd="260dp"
+            android:layout_marginBottom="32dp"
+            android:ellipsize="end"
+            android:fontFamily="@font/barlow_condensed"
+            android:singleLine="true"
+            android:text="Mesmo Wi-Fi · Abra o CastViewer no PC · Clique em Transmitir"
+            android:textColor="#63636E"
+            android:textSize="12sp" />
+
+        <!-- Quiet bottom-right network-localized clock with seconds (waiting screen only) -->
+        <LinearLayout
+            android:id="@+id/clockCornerLayout"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="72dp"
+            android:layout_marginBottom="26dp"
+            android:gravity="end|bottom"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvClockLocation"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/barlow_condensed"
+                android:letterSpacing="0.05"
+                android:textColor="#8E8E98"
+                android:textSize="12sp"
+                android:visibility="gone"
+                tools:text="São Paulo, SP · BRT"
+                tools:visibility="visible" />
+
+            <TextView
+                android:id="@+id/tvCornerClock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/barlow_condensed"
+                android:fontFeatureSettings="tnum"
+                android:letterSpacing="0.04"
+                android:textColor="#A1A1AA"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                tools:text="01:10:46" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- 4. SIGNATURE 60 FPS "PRISM IGNITION" CINEMATIC INTRO OVERLAY -->
+    <com.firecast.local.CinematicIntroView
+        android:id="@+id/splashOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="true"
+        android:elevation="50dp"
+        android:focusable="false"
+        android:visibility="visible" />
+
+</FrameLayout>

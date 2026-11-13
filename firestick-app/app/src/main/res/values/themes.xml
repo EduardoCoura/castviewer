@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.FireCastLocal" parent="Theme.AppCompat.NoActionBar">
+        <!-- Status / Nav bars invisible on TV -->
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowBackground">@color/cv_bg_canvas</item>
+        <item name="android:colorBackground">@color/cv_bg_canvas</item>
+
+        <!-- Keep screen on for TV display -->
+        <item name="android:keepScreenOn">true</item>
+
+        <!-- Brand colors -->
+        <item name="colorPrimary">@color/cv_accent</item>
+        <item name="colorAccent">@color/cv_accent</item>
+    </style>
+</resources>

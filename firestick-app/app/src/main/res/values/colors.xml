@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- CastViewer Design System Tokens (Apple TV / Cinema Obsidian + Fire Orange) -->
+    <!-- Cinema Obsidian Canvas & Surfaces -->
+    <color name="cv_cinema_obsidian">#08090C</color>
+    <color name="cv_bg_canvas">#08090C</color>
+    <color name="cv_bg_surface">#14161D</color>
+    <color name="cv_bg_surface_hover">#1D202A</color>
+    <color name="cv_bg_inset">#0E1015</color>
+
+    <!-- Hairline Borders & Glass Rims -->
+    <color name="cv_border_subtle">#1FFFFFFF</color>
+    <color name="cv_border_strong">#40FFFFFF</color>
+
+    <!-- Signature Accents -->
+    <color name="cv_accent">#FF6B1A</color>          <!-- Fire Orange primary accent -->
+    <color name="cv_accent_hover">#FF8A3D</color>    <!-- Fire Orange lighter glowing hover -->
+    <color name="cv_accent_glow">#33FF6B1A</color>
+    <color name="cv_fire_orange">#FF6B1A</color>
+    <color name="cv_live">#22C55E</color>            <!-- Emerald live dot / connection active -->
+    <color name="cv_dot_live">#22C55E</color>
+    <color name="cv_live_glow">#3322C55E</color>
+    <color name="cv_live_bg">#1A22C55E</color>
+    <color name="cv_danger">#EF4444</color>
+
+    <!-- Authentic 10-foot Apple TV Typography Tokens -->
+    <color name="cv_apple_white">#F5F5F7</color>     <!-- Off-white high-contrast text -->
+    <color name="cv_text_primary">#F5F5F7</color>
+    <color name="cv_text_secondary">#A1A1AA</color>
+    <color name="cv_status_muted">#A1A1AA</color>
+    <color name="cv_text_muted">#71717A</color>
+    <color name="cv_qr_mono">#71717A</color>
+    <color name="cv_hint_subtle">#63636E</color>     <!-- Subtle hint text -->
+
+    <!-- Semantic Aliases for Compatibility -->
+    <color name="bg_tv_canvas">@color/cv_cinema_obsidian</color>
+    <color name="bg_tv_dark">@color/cv_cinema_obsidian</color>
+    <color name="bg_tv_gradient_start">@color/cv_cinema_obsidian</color>
+    <color name="bg_tv_gradient_mid">#0E1015</color>
+    <color name="bg_tv_gradient_end">#14161D</color>
+
+    <color name="bg_tv_surface">@color/cv_bg_surface</color>
+    <color name="bg_card">@color/cv_bg_surface</color>
+    <color name="bg_glass_card">@color/cv_bg_surface</color>
+    <color name="bg_glass_card_solid">@color/cv_bg_surface</color>
+    <color name="bg_tv_inset">@color/cv_bg_inset</color>
+
+    <color name="border_hairline">@color/cv_border_subtle</color>
+    <color name="border_active">@color/cv_border_strong</color>
+    <color name="bg_card_border">@color/cv_border_subtle</color>
+    <color name="bg_card_border_highlight">@color/cv_border_strong</color>
+
+    <color name="accent_indigo">@color/cv_accent</color>
+    <color name="accent_indigo_hover">@color/cv_accent_hover</color>
+    <color name="accent_cyan">@color/cv_accent</color>
+    <color name="accent_cyan_glow">@color/cv_accent_glow</color>
+    <color name="fire_orange">@color/cv_fire_orange</color>
+    <color name="fire_amber">@color/cv_accent_hover</color>
+    <color name="fire_orange_glow">@color/cv_accent_glow</color>
+
+    <color name="status_green">@color/cv_dot_live</color>
+    <color name="status_green_glow">@color/cv_live_glow</color>
+    <color name="status_emerald">@color/cv_dot_live</color>
+    <color name="bg_status_pill">@color/cv_live_bg</color>
+    <color name="border_status_pill">#3322C55E</color>
+
+    <color name="bg_address_pill">@color/cv_bg_inset</color>
+    <color name="border_address_pill">@color/cv_border_subtle</color>
+    <color name="bg_hud_overlay">#E614161D</color>
+    <color name="border_hud_overlay">@color/cv_border_subtle</color>
+    <color name="bg_ip_badge">@color/cv_bg_inset</color>
+    <color name="border_ip_badge">@color/cv_border_subtle</color>
+    <color name="bg_qr_frame">#FFFFFF</color>
+
+    <color name="text_primary">@color/cv_apple_white</color>
+    <color name="text_secondary">@color/cv_text_secondary</color>
+    <color name="text_muted">@color/cv_text_muted</color>
+    <color name="text_code">@color/cv_accent_hover</color>
+    <color name="text_accent_amber">@color/cv_accent_hover</color>
+    <color name="text_accent_cyan">@color/cv_accent</color>
+</resources>

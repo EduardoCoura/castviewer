@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Calm, deep cinema obsidian backdrop (#08090C) -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/cv_cinema_obsidian" />
+        </shape>
+    </item>
+
+    <!-- Ultra-subtle top vignette for depth -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="linear"
+                android:angle="270"
+                android:startColor="#141824"
+                android:centerColor="#0A0B10"
+                android:endColor="#08090C"
+                android:centerY="0.38" />
+        </shape>
+    </item>
+</layer-list>
