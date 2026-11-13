@@ -52,12 +52,16 @@ jobs:
         working-directory: desktop-sender
         run: |
           ls -lh dist/*.dmg
-          APP_DIR=$(find dist -maxdepth 3 -name "CastViewer.app" | head -n 1)
-          test -n "$APP_DIR"
+          if [ -d "dist/mac-universal/CastViewer.app" ]; then
+            APP_DIR="dist/mac-universal/CastViewer.app"
+          else
+            APP_DIR=$(find dist -maxdepth 3 -name "CastViewer.app" -print | sed -n '1p')
+          fi
+          test -d "$APP_DIR"
           APP_BIN="$APP_DIR/Contents/MacOS/CastViewer"
           INFO_PLIST="$APP_DIR/Contents/Info.plist"
           lipo -info "$APP_BIN"
-          lipo -verify_arch x86_64 arm64 "$APP_BIN"
+          lipo "$APP_BIN" -verify_arch x86_64 arm64
           /usr/libexec/PlistBuddy -c "Print :NSAudioCaptureUsageDescription" "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Print :NSScreenCaptureUsageDescription" "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Print :NSLocalNetworkUsageDescription" "$INFO_PLIST"
