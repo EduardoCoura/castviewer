@@ -15,6 +15,7 @@
 [![macOS Build](https://img.shields.io/github/actions/workflow/status/EduardoCoura/castviewer/build-macos.yml?branch=main&label=macOS%20.dmg&style=for-the-badge)](https://github.com/EduardoCoura/castviewer/actions/workflows/build-macos.yml)
 [![Linux Build](https://img.shields.io/github/actions/workflow/status/EduardoCoura/castviewer/build-linux.yml?branch=main&label=Linux%20Build&style=for-the-badge)](https://github.com/EduardoCoura/castviewer/actions/workflows/build-linux.yml)
 [![Windows Build](https://img.shields.io/github/actions/workflow/status/EduardoCoura/castviewer/build-windows.yml?branch=main&label=Windows%20Build&style=for-the-badge)](https://github.com/EduardoCoura/castviewer/actions/workflows/build-windows.yml)
+[![Android & Fire TV Build](https://img.shields.io/github/actions/workflow/status/EduardoCoura/castviewer/build-android.yml?branch=main&label=Android%20%26%20Fire%20TV&style=for-the-badge)](https://github.com/EduardoCoura/castviewer/actions/workflows/build-android.yml)
 [![Plataformas](https://img.shields.io/badge/Plataformas-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS%20(AirPlay)%20%7C%20Fire%20TV-18181D?style=for-the-badge)](#downloads)
 
 <br/>
@@ -91,6 +92,19 @@ chmod +x CastViewer-Linux-1.1.0-x86_64.AppImage
 - **X11:** prévia e troca direta de telas e janelas na grade da interface.
 - **Wayland (PipeWire + `RestoreToken`):** utiliza `WebRTCPipeWireCapturer` com **Wayland Session Persistence** (`persist_mode = 2` e cache local do token/fonte), evitando chamadas em segundo plano ao portal e preservando a seleção ao alternar presets ou fontes — além de card dedicado **"Trocar Tela/Janela (Abrir Portal Wayland)"** para reescolher quando desejar.
 - **Áudio do sistema:** captura nativa via PipeWire (`loopback-capture`) com fallback automático para `parec` (PulseAudio), além de silenciamento do PC via `pactl`/`wpctl` e Play/Pause remoto via `playerctl`.
+
+</details>
+
+<details>
+<summary><b>📱 Android: Smart View (Sem App) vs. App CastViewer Android</b></summary>
+
+<br/>
+
+- **Posso usar Samsung Smart View / Miracast sem baixar app no celular?**
+  - **Sim, usando o receptor nativo da própria Fire TV:** segure o botão **Home** no controle da Fire TV e selecione **Espelhamento** (*Display Mirroring*). O Smart View encontra a Fire TV diretamente via Miracast (Wi-Fi Direct).
+  - _Nota técnica:_ o Fire OS / Android restringe a permissão `CONFIGURE_WIFI_DISPLAY` a apps assinados pelo sistema (`signature|privileged`), e o Google Cast exige certificados privados de hardware Google Root CA — por isso um app terceiro GPLv3 sem root não consegue substituir o Miracast ou o Google Cast oficiais dentro do mesmo APK.
+- **Quando vale instalar o [`CastViewer-Android-v1.7.4.apk`](https://github.com/EduardoCoura/castviewer/releases/download/v1.1.0/CastViewer-Android-v1.7.4.apk)?**
+  - Celulares sem Miracast (ex.: Google Pixel ou aparelhos sem Wi-Fi Direct compatível), redes em que o Wi-Fi Direct trava, ou quando você quer **WebRTC LAN (~4 ms)**, **áudio interno (`AudioPlaybackCapture`)**, **Modo AMOLED**, **Bolha Flutuante**, **Quick Tile** e **Replay 30s**.
 
 </details>
 
