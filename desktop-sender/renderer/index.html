@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:; media-src 'self' file: blob: mediastream:; worker-src 'self' blob:;" />
+  <title>CastViewer</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="craft-theme.css">
+</head>
+<body>
+  <!-- Top Bar (48px) - Windows 11 / Apple TV+ Glass -->
+  <header class="topbar" role="banner">
+    <div class="topbar-left">
+      <!-- CastViewer Brand Display-Beam Mark -->
+      <div class="brand" title="CastViewer v1.0.0">
+        <svg class="brand-logo" viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
+          <!-- Rounded Screen Frame -->
+          <rect x="2.5" y="3.5" width="19" height="13" rx="2.5" stroke="#FAFAFA" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M9 19.5h6M12 16.5v3" stroke="#FAFAFA" stroke-width="1.8" stroke-linecap="round"/>
+          <!-- Sharp Minimal Cast/Play Beam in Fire Orange -->
+          <path d="M8 7.5L16 10L8 12.5V7.5Z" fill="#FF6B1A"/>
+        </svg>
+        <span class="brand-name">CastViewer</span>
+        <span class="brand-badge">LAN</span>
+      </div>
+    </div>
+
+    <!-- 3-Tab Switcher (Pill Style) -->
+    <nav class="topbar-center" aria-label="Navegação Principal">
+      <div class="tab-switcher" role="tablist" aria-label="Seções do CastViewer">
+        <button id="tab-btn-stream" class="tab-pill active" role="tab" aria-selected="true" type="button">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="3" width="20" height="14" rx="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+          <span>Transmitir</span>
+        </button>
+        <button id="tab-btn-captures" class="tab-pill" role="tab" aria-selected="false" type="button">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="6" width="20" height="14" rx="2"/>
+            <path d="M8 6l2-3h4l2 3"/>
+            <polygon points="10 10 15 13 10 16 10 10"/>
+          </svg>
+          <span>Capturas</span>
+          <span id="captures-tab-count" class="tab-count-pill hidden">0</span>
+        </button>
+        <button id="tab-btn-settings" class="tab-pill" role="tab" aria-selected="false" type="button">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span>Ajustes</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Topbar Right: Status Pill & Window Controls -->
+    <div class="topbar-right">
+      <div id="status-pill" class="status-pill idle" role="status" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="status-pill-text">Pronto</span>
+      </div>
+
+      <div class="window-controls" role="group" aria-label="Controles da Janela">
+        <button id="btn-tray-min" class="win-btn" title="Minimizar para a Bandeja do Sistema" aria-label="Minimizar para a Bandeja" type="button">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="3"/>
+            <path d="M12 8v8M8 12h8"/>
+          </svg>
+        </button>
+        <button id="btn-min" class="win-btn" title="Minimizar Janela" aria-label="Minimizar" type="button">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+        <button id="btn-close" class="win-btn close" title="Fechar CastViewer" aria-label="Fechar" type="button">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Notification Toast -->
+  <div id="toast" class="toast hidden" role="alert" aria-live="assertive">
+    <span id="toast-message"></span>
+  </div>
+
+  <!-- Content Container (Tabs) -->
+  <div class="content-wrapper">
+
+    <!-- Global Incoming Takeover Approval Banner (Visible on ANY tab when another device asks to assume TV) -->
+    <div id="takeover-request-banner" class="takeover-request-banner hidden" role="alertdialog" aria-labelledby="takeover-request-title" aria-describedby="takeover-request-desc">
+      <div class="takeover-request-info">
+        <span class="takeover-request-badge" id="takeover-request-timer">15s</span>
+        <div class="takeover-request-copy">
+          <strong id="takeover-request-title" class="takeover-request-title">Outro dispositivo quer assumir a TV</strong>
+          <span id="takeover-request-desc" class="takeover-request-desc">Deseja aceitar e encerrar sua transmissão atual?</span>
+        </div>
+      </div>
+      <div class="takeover-request-actions">
+        <button id="btn-deny-takeover" class="btn-ghost takeover-deny-btn" type="button">Recusar</button>
+        <button id="btn-accept-takeover" class="busy-takeover-btn takeover-accept-btn" type="button">Aceitar</button>
+      </div>
+    </div>
+
+    <!-- ====================================================================
+         TAB 1: TRANSMITIR (Windows 11 Mica Glass, Ultra-clean, Only Essentials)
+         ==================================================================== -->
+    <section id="panel-stream" class="tab-panel active" role="tabpanel" aria-labelledby="tab-btn-stream" tabindex="-1">
+      
+      <!-- 1. Discovered TVs Selector -->
+      <div class="section-card tv-selection-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2 class="section-title">Dispositivos Fire TV</h2>
+            <span id="tv-count-badge" class="badge-tag searching">
+              <span class="badge-dot" aria-hidden="true"></span>
+              <span id="tv-count-text">Buscando na rede...</span>
+            </span>
+          </div>
+          <div class="section-actions">
+            <button id="btn-toggle-manual" class="btn-ghost" title="Adicionar Fire TV manualmente por IP" aria-expanded="false" type="button">
+              <span>+ IP</span>
+            </button>
+            <button id="btn-refresh-devices" class="btn-icon" title="Buscar dispositivos na rede Wi-Fi" aria-label="Atualizar lista de TVs" type="button">
+              <svg id="refresh-tv-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M23 4v6h-6M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Inline Manual IP Collapsible Bar -->
+        <div id="manual-ip-bar" class="manual-ip-bar hidden">
+          <div class="manual-ip-inputs">
+            <input type="text" id="input-manual-ip" class="input-text" placeholder="IP da TV (ex: 192.168.1.50)" spellcheck="false" autocomplete="off" />
+            <input type="number" id="input-manual-port" class="input-text port" value="8765" min="1024" max="65535" />
+          </div>
+          <button id="btn-add-manual" class="btn-accent-sm" type="button">Adicionar</button>
+        </div>
+
+        <!-- Last TV Reconnect Quick Bar -->
+        <div id="last-tv-banner" class="last-tv-banner hidden">
+          <div class="last-tv-info">
+            <span class="badge-beta">RÁPIDO</span>
+            <span>Última TV:</span>
+            <strong id="last-tv-name" class="last-tv-name">Fire TV</strong>
+          </div>
+          <button id="btn-quick-reconnect" class="last-tv-btn" type="button" title="Conectar diretamente a este dispositivo">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+              <polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+            <span>Reconectar</span>
+          </button>
+        </div>
+
+        <!-- Inline Busy Session Takeover Banner -->
+        <div id="busy-takeover-banner" class="busy-takeover-banner hidden" role="region" aria-label="Sessão ocupada na Fire TV">
+          <div class="busy-takeover-info">
+            <span class="busy-takeover-badge">OCUPADA</span>
+            <span id="busy-takeover-text" class="busy-takeover-text">TV ocupada por outro dispositivo.</span>
+          </div>
+          <div class="busy-takeover-actions">
+            <button id="btn-force-takeover" class="busy-takeover-btn" type="button">Assumir TV</button>
+            <button id="btn-dismiss-takeover" class="busy-takeover-close" type="button" aria-label="Fechar aviso de TV ocupada" title="Dispensar">&times;</button>
+          </div>
+        </div>
+
+        <!-- Horizontal Scrollable Row of TVs -->
+        <div id="devices-row" class="devices-row" role="radiogroup" aria-label="Dispositivos Fire TV detectados">
+          <!-- Rendered dynamically via JS -->
+        </div>
+      </div>
+
+      <!-- 2. Clean 16:9 Screen/Window Picker (Telas | Janelas) -->
+      <div class="section-card sources-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2 class="section-title">Fonte de Espelhamento</h2>
+            <div class="segment-control" role="tablist" aria-label="Filtrar fontes">
+              <button id="tab-sources-screens" class="segment-btn active" role="tab" aria-selected="true" type="button">Telas</button>
+              <button id="tab-sources-windows" class="segment-btn" role="tab" aria-selected="false" type="button">Janelas</button>
+            </div>
+          </div>
+          <div class="section-actions">
+            <button id="btn-refresh-sources" class="btn-icon" title="Atualizar prévias de telas e janelas" aria-label="Atualizar fontes" type="button">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 2v6h-6M3 22v-6h6"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L21 8M3 16l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- 16:9 Thumbnail Cards Grid -->
+        <div id="sources-grid" class="sources-grid" role="radiogroup" aria-label="Telas e Janelas disponíveis" tabindex="-1">
+          <!-- Rendered dynamically via JS -->
+        </div>
+      </div>
+
+      <!-- 3. Bottom Dock: Compact Telemetry Pill (Left) + Crisp Controls & Fire-Orange CTA (Right) -->
+      <div class="bottom-dock stream-dock" role="region" aria-label="Controle de Transmissão">
+        <!-- Left: Compact Single-Line Telemetry Pill (Always visible, non-clipping) -->
+        <div id="dock-status-pill" class="dock-status-pill" title="Status da transmissão em tempo real">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="dock-rtt-fps-text">Pronto</span>
+        </div>
+
+        <!-- Right: Compact Capture/Audio Toolbar + Primary Fire-Orange Button -->
+        <div id="stream-dock-toolbar" class="dock-actions" role="toolbar" focusgroup="toolbar wrap" aria-label="Ações rápidas de transmissão">
+          <div role="group" class="dock-tool-group" aria-label="Controles de Áudio e Pausa">
+            <!-- Quick Audio Toggle Button -->
+            <button id="btn-quick-audio" class="dock-icon-btn active" aria-pressed="true" title="Áudio para TV: Ativado (Clique para alternar)" aria-label="Áudio para TV" type="button">
+              <!-- Icon Audio On -->
+              <svg class="icon-audio-on" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+              </svg>
+              <!-- Icon Audio Muted -->
+              <svg class="icon-audio-off hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <line x1="23" y1="9" x2="17" y2="15"/>
+                <line x1="17" y1="9" x2="23" y2="15"/>
+              </svg>
+            </button>
+
+            <!-- Quick Silenciar Notebook Toggle Button -->
+            <button id="btn-dock-mute-speaker" class="dock-icon-btn" aria-pressed="false" title="Silenciar alto-falante do notebook (Áudio somente na TV)" aria-label="Silenciar Notebook" type="button">
+              <!-- Laptop Speaker Mute Icon -->
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="12" rx="2"/>
+                <line x1="2" y1="20" x2="22" y2="20"/>
+                <line x1="8" y1="8" x2="16" y2="12"/>
+                <line x1="16" y1="8" x2="8" y2="12"/>
+              </svg>
+            </button>
+
+            <!-- Quick Pause / Resume Stream Button (Synced with Fire TV Remote) -->
+            <button id="btn-dock-pause-stream" class="dock-icon-btn hidden" aria-pressed="false" title="Pausar transmissão (Sincronizado com o controle do Fire TV)" aria-label="Pausar transmissão" type="button">
+              <!-- Pause Icon -->
+              <svg class="icon-stream-pause" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="6" y="4" width="4" height="16" rx="1"/>
+                <rect x="14" y="4" width="4" height="16" rx="1"/>
+              </svg>
+              <!-- Play / Resume Icon -->
+              <svg class="icon-stream-play hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polygon points="6 4 20 12 6 20 6 4"/>
+              </svg>
+            </button>
+          </div>
+
+          <span role="separator" aria-orientation="vertical" class="dock-separator"></span>
+
+          <div role="group" class="dock-tool-group" aria-label="Capturas do Espelhamento">
+            <!-- 1-Click Screenshot -->
+            <button id="btn-dock-screenshot" class="dock-icon-btn dock-capture-btn" aria-disabled="true" title="Tirar Print 1-clique (Inicie o espelhamento para capturar)" aria-label="Tirar Print 1-clique" type="button">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+            </button>
+
+            <!-- 1-Click Clip 30s -->
+            <button id="btn-dock-clip-30s" class="dock-pill-action-btn" aria-disabled="true" title="Salvar Clip 30s (Inicie o espelhamento para usar o replay buffer)" aria-label="Salvar Clip 30 segundos" type="button">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
+                <path d="M3 3v5h5"/>
+                <polygon points="10 9 16 12 10 15 10 9" fill="currentColor" stroke="none"/>
+              </svg>
+              <span id="btn-dock-clip-text">Clip 30s</span>
+            </button>
+          </div>
+
+          <!-- Primary Fire-Orange Action Button -->
+          <button id="btn-cast-action" class="btn-main-cta idle" disabled type="button">
+            <span class="btn-cta-icon-box" aria-hidden="true">
+              <!-- Cast Icon -->
+              <svg class="icon-cta-cast" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6M2 20h.01"/>
+              </svg>
+              <!-- Stop Icon -->
+              <svg class="icon-cta-stop hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4" y="4" width="16" height="16" rx="2"/>
+              </svg>
+              <!-- Connecting Spinner -->
+              <svg class="icon-cta-spinner hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2">
+                <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+                <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <span id="btn-action-text" class="btn-cta-text">Transmitir</span>
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+
+    <!-- ====================================================================
+         TAB 2: CAPTURAS (Galeria Rápida de Clips 30s & Screenshots PNG)
+         ==================================================================== -->
+    <section id="panel-captures" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-btn-captures" tabindex="-1" hidden>
+      <div class="section-card captures-card">
+        <div class="section-header captures-header">
+          <div class="section-title-group">
+            <h2 class="section-title">Galeria de Capturas</h2>
+            <span id="captures-replay-badge" class="badge-tag">Replay 30s pronto</span>
+          </div>
+          <div class="captures-toolbar" role="toolbar" focusgroup="toolbar wrap" aria-label="Filtros e pastas de capturas">
+            <div class="segment-control" role="group" aria-label="Filtrar tipo">
+              <button id="btn-filter-all" class="segment-btn active" type="button" aria-pressed="true">Tudo</button>
+              <button id="btn-filter-clips" class="segment-btn" type="button" aria-pressed="false">Clips</button>
+              <button id="btn-filter-prints" class="segment-btn" type="button" aria-pressed="false">Prints</button>
+            </div>
+            <button id="btn-open-clips-folder" class="btn-ghost" type="button" title="Abrir pasta Vídeos\CastViewer no Explorer">Pasta Vídeos</button>
+            <button id="btn-open-prints-folder" class="btn-ghost" type="button" title="Abrir pasta Imagens\CastViewer no Explorer">Pasta Prints</button>
+            <button id="btn-refresh-captures" class="btn-icon" type="button" title="Atualizar galeria de capturas" aria-label="Atualizar galeria de capturas">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 2v6h-6M3 22v-6h6"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L21 8M3 16l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <p class="captures-hint">Clipes de até 30s salvos em <code>Vídeos\CastViewer</code> e Prints em <code>Imagens\CastViewer</code> — prontos para abrir ou compartilhar no Discord e WhatsApp.</p>
+
+        <div id="captures-grid" class="captures-grid" role="list" aria-label="Clipes e capturas salvas">
+          <!-- Rendered dynamically via JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================================
+         TAB 3: AJUSTES (Windows 11 Mica Glass Aesthetic)
+         ==================================================================== -->
+    <section id="panel-settings" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-btn-settings" tabindex="-1" hidden>
+      <div class="settings-scroll-container">
+
+        <!-- 1. Vídeo & Latência Presets (Changeable LIVE!) -->
+        <div class="settings-card">
+          <div class="card-header">
+            <h3 class="card-title">Vídeo & Latência</h3>
+            <span class="card-desc">Selecione o perfil de transmissão (alteração imediata em tempo real!)</span>
+          </div>
+
+          <div class="presets-container" role="radiogroup" aria-label="Presets de qualidade de vídeo">
+            <!-- Preset 1: 720p60 Baixo Delay -->
+            <label class="preset-option" for="preset-720p60">
+              <input type="radio" id="preset-720p60" name="video-preset" value="720p60" />
+              <div class="preset-info">
+                <div class="preset-line1">
+                  <span class="preset-name">720p60 Ultra Baixo Delay</span>
+                  <span class="preset-badge speed">Menor Latência</span>
+                </div>
+                <div class="preset-specs">720p • 60 FPS • 10 Mbps</div>
+                <div class="preset-text">Resposta ultrarrápida, ideal para jogos, Wi-Fi 2.4 GHz e redes congestionadas.</div>
+              </div>
+              <div class="preset-radio" aria-hidden="true"></div>
+            </label>
+
+            <!-- Preset 2: 1080p60 Fluido (Alta Definição - Padrão Recomendado) -->
+            <label class="preset-option selected" for="preset-1080p60">
+              <input type="radio" id="preset-1080p60" name="video-preset" value="1080p60" checked />
+              <div class="preset-info">
+                <div class="preset-line1">
+                  <span class="preset-name">1080p60 Fluido</span>
+                  <span class="preset-badge recommended">Recomendado</span>
+                </div>
+                <div class="preset-specs">1080p • 60 FPS • 16 Mbps</div>
+                <div class="preset-text">Máxima nitidez Full HD 1:1 e movimento impecável para trabalho, filmes e vídeos.</div>
+              </div>
+              <div class="preset-radio" aria-hidden="true"></div>
+            </label>
+
+            <!-- Preset 3: 1080p30 Cinema -->
+            <label class="preset-option" for="preset-1080p30">
+              <input type="radio" id="preset-1080p30" name="video-preset" value="1080p30" />
+              <div class="preset-info">
+                <div class="preset-line1">
+                  <span class="preset-name">1080p30 Cinema</span>
+                  <span class="preset-badge eco">Econômico</span>
+                </div>
+                <div class="preset-specs">1080p • 30 FPS • 8 Mbps</div>
+                <div class="preset-text">Alta fidelidade de cores a 30 FPS com baixíssimo consumo de CPU e banda.</div>
+              </div>
+              <div class="preset-radio" aria-hidden="true"></div>
+            </label>
+
+            <!-- Preset 4: 720p30 PC Fraco (Ultra Leve) -->
+            <label class="preset-option" for="preset-720p30">
+              <input type="radio" id="preset-720p30" name="video-preset" value="720p30" />
+              <div class="preset-info">
+                <div class="preset-line1">
+                  <span class="preset-name">720p30 PC Fraco</span>
+                  <span class="preset-badge low-pc">Ultra Leve</span>
+                </div>
+                <div class="preset-specs">720p • 30 FPS • 5 Mbps</div>
+                <div class="preset-text">Carga mínima de processador e placa de vídeo (~78% menos pixels/s que 1080p60). Ideal para CPUs antigas e vídeo integrado.</div>
+              </div>
+              <div class="preset-radio" aria-hidden="true"></div>
+            </label>
+          </div>
+
+          <!-- Controle de Latência (Sincronizado no Notebook e Fire TV) -->
+          <div class="settings-subgroup" style="margin-top: 16px; border-top: 1px solid var(--cv-border-subtle); padding-top: 14px;">
+            <div class="setting-text">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span class="setting-label">Controle de Latência</span>
+                <span class="badge-beta">AO VIVO</span>
+              </div>
+              <span class="setting-hint">Ajuste o atraso e buffer de rede em tempo real com confirmação no notebook e na TV</span>
+            </div>
+            <div class="image-mode-group" role="radiogroup" aria-label="Controle de Latência">
+              <button id="btn-latency-ultra" class="image-mode-btn active" type="button" role="radio" aria-checked="true">
+                <div class="mode-title">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  <span>Ultra Baixa (Tempo Real)</span>
+                </div>
+                <span class="mode-desc">Buffer mínimo (0 ms alvo). Resposta imediata para desktop, mouse e jogos a 60 FPS.</span>
+              </button>
+              <button id="btn-latency-balanced" class="image-mode-btn" type="button" role="radio" aria-checked="false">
+                <div class="mode-title">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+                  <span>Equilibrada (Estável Wi-Fi)</span>
+                </div>
+                <span class="mode-desc">Micro-buffer adaptativo (~60 ms) para fluidez contínua em redes Wi-Fi distantes.</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Modo Nitidez vs Movimento -->
+          <div class="settings-subgroup" style="margin-top: 16px; border-top: 1px solid var(--cv-border-subtle); padding-top: 14px;">
+            <div class="setting-text">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span class="setting-label">Modo de Imagem</span>
+                <span class="badge-beta">AO VIVO</span>
+              </div>
+              <span class="setting-hint">Alterne dinamicamente em tempo real sem desconectar da TV</span>
+            </div>
+            <div class="image-mode-group" role="radiogroup" aria-label="Modo de Imagem">
+              <button id="btn-mode-detail" class="image-mode-btn" type="button" role="radio" aria-checked="false">
+                <div class="mode-title">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
+                  <span>Nitidez (Texto / Apps)</span>
+                </div>
+                <span class="mode-desc">Resolução mantida sem blur. Linhas e fontes nítidas para código, texto e planilhas.</span>
+              </button>
+              <button id="btn-mode-motion" class="image-mode-btn active" type="button" role="radio" aria-checked="true">
+                <div class="mode-title">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <span>Movimento (Vídeos / Jogos)</span>
+                </div>
+                <span class="mode-desc">Otimizado para movimento a 60 FPS com fluidez contínua em games e vídeos.</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Áudio Nativo & Alto-falante do Notebook (Zero VB-CABLE Needed!) -->
+        <div class="settings-card">
+          <div class="card-header">
+            <h3 class="card-title">Áudio & Alto-falante</h3>
+            <span class="card-desc">Captura de áudio nativa pré-mudo via loopback e monitoramento em tempo real</span>
+          </div>
+
+          <!-- Switch Enviar áudio para TV -->
+          <div class="setting-row">
+            <div class="setting-text">
+              <label for="toggle-audio-settings" class="setting-label">Enviar áudio para TV</label>
+              <span class="setting-hint">Captura áudio do sistema (48 kHz estéreo) e transmite com sincronia para a TV</span>
+            </div>
+            <label class="cv-switch" for="toggle-audio-settings">
+              <input type="checkbox" id="toggle-audio-settings" checked role="switch" aria-checked="true" />
+              <span class="cv-switch-track" aria-hidden="true">
+                <span class="cv-switch-thumb"></span>
+              </span>
+            </label>
+          </div>
+
+          <!-- Switch Silenciar alto-falante do notebook (Áudio só na TV) -->
+          <div class="setting-row">
+            <div class="setting-text">
+              <label for="toggle-mute-speaker-settings" class="setting-label">Silenciar alto-falante do notebook (Áudio só na TV)</label>
+              <span class="setting-hint">Silencia os alto-falantes do PC instantaneamente sem cortar a TV (sem VB-CABLE!)</span>
+            </div>
+            <label class="cv-switch" for="toggle-mute-speaker-settings">
+              <input type="checkbox" id="toggle-mute-speaker-settings" role="switch" aria-checked="false" />
+              <span class="cv-switch-track" aria-hidden="true">
+                <span class="cv-switch-thumb"></span>
+              </span>
+            </label>
+          </div>
+
+          <!-- LIVE WEB AUDIO API VU LEVEL METER -->
+          <div class="vu-meter-box" role="region" aria-label="Medidor de Nível de Áudio VU">
+            <div class="vu-header">
+              <div class="vu-title-row">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M12 2v20M17 5v14M7 9v6M22 8v8M2 11v2"/>
+                </svg>
+                <span class="vu-title">Medidor VU em Tempo Real</span>
+              </div>
+              <div class="vu-meta">
+                <span id="vu-status-text" class="vu-status">Aguardando transmissão...</span>
+                <span id="vu-db-text" class="vu-db">-∞ dB</span>
+              </div>
+            </div>
+
+            <!-- Dual Stereo VU Bars -->
+            <div class="vu-bars-container">
+              <!-- Canal Esquerdo (L) -->
+              <div class="vu-channel-row">
+                <span class="channel-label">L</span>
+                <div class="vu-track">
+                  <div id="vu-bar-left" class="vu-fill" style="width: 0%;"></div>
+                  <div class="vu-ticks" aria-hidden="true">
+                    <span>-40</span>
+                    <span>-20</span>
+                    <span>-10</span>
+                    <span>-3</span>
+                    <span>0dB</span>
+                  </div>
+                </div>
+              </div>
+              <!-- Canal Direito (R) -->
+              <div class="vu-channel-row">
+                <span class="channel-label">R</span>
+                <div class="vu-track">
+                  <div id="vu-bar-right" class="vu-fill" style="width: 0%;"></div>
+                  <div class="vu-ticks" aria-hidden="true">
+                    <span>-40</span>
+                    <span>-20</span>
+                    <span>-10</span>
+                    <span>-3</span>
+                    <span>0dB</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- VU explanation & local test button -->
+            <div class="vu-footer">
+              <span class="vu-note">Áudio capturado em PCM puro 48 kHz diretamente pelo CastViewer.</span>
+              <button id="btn-vu-test" class="btn-subtle-action" type="button">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                <span id="btn-vu-test-text">Testar Som Local</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Telemetria Avançada -->
+        <div class="settings-card">
+          <div class="card-header">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <h3 class="card-title">Telemetria Avançada</h3>
+              <span class="badge-beta">AO VIVO</span>
+            </div>
+            <span class="card-desc">Diagnóstico em tempo real de latência, jitter, perda de pacotes e taxa de quadros</span>
+          </div>
+
+          <div id="adv-telemetry-idle" class="telemetry-idle-notice">
+            Inicie uma transmissão para visualizar o diagnóstico de rede em tempo real.
+          </div>
+
+          <div id="adv-telemetry-grid" class="telemetry-grid hidden">
+            <div class="telemetry-card-cell">
+              <span class="telemetry-cell-label">Latência (RTT)</span>
+              <span id="adv-rtt" class="telemetry-cell-value">-- ms</span>
+              <span class="telemetry-cell-sub">Ida e volta</span>
+            </div>
+            <div class="telemetry-card-cell">
+              <span class="telemetry-cell-label">Jitter</span>
+              <span id="adv-jitter" class="telemetry-cell-value">-- ms</span>
+              <span class="telemetry-cell-sub">Variação de atraso</span>
+            </div>
+            <div class="telemetry-card-cell">
+              <span class="telemetry-cell-label">Perda de Pacotes</span>
+              <span id="adv-loss" class="telemetry-cell-value">0.0%</span>
+              <span id="adv-loss-packets" class="telemetry-cell-sub">0 perdidos</span>
+            </div>
+            <div class="telemetry-card-cell">
+              <span class="telemetry-cell-label">Taxa de Quadros</span>
+              <span id="adv-fps" class="telemetry-cell-value">-- FPS</span>
+              <span id="adv-target-fps" class="telemetry-cell-sub">Alvo: 60 FPS</span>
+            </div>
+            <div class="telemetry-card-cell">
+              <span class="telemetry-cell-label">Bitrate de Envio</span>
+              <span id="adv-bitrate" class="telemetry-cell-value">-- Mbps</span>
+              <span class="telemetry-cell-sub">Taxa efetiva</span>
+            </div>
+            <div class="telemetry-card-cell">
+              <span class="telemetry-cell-label">Resolução Ativa</span>
+              <span id="adv-resolution" class="telemetry-cell-value">--</span>
+              <span class="telemetry-cell-sub">maintain-resolution</span>
+            </div>
+            <div class="telemetry-card-cell">
+              <span class="telemetry-cell-label">Codec & Encoder</span>
+              <span id="adv-codec" class="telemetry-cell-value" style="font-size:12px;">H.264 Baseline</span>
+              <span id="adv-codec-sub" class="telemetry-cell-sub">Zero-Delay • L1T1</span>
+            </div>
+            <div class="telemetry-card-cell">
+              <span class="telemetry-cell-label">Modo Ativo</span>
+              <span id="adv-mode" class="telemetry-cell-value" style="font-size:12px;">Nitidez</span>
+              <span id="adv-hint" class="telemetry-cell-sub">contentHint: detail</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3B. PC Fraco, Compatibilidade & Pouca RAM -->
+        <div class="settings-card" id="card-low-spec">
+          <div class="card-header">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <h3 class="card-title">PC Fraco, Compatibilidade &amp; RAM</h3>
+              <span class="badge-beta" id="perf-auto-badge">AUTO</span>
+            </div>
+            <span class="card-desc">Identifica seu processador, placa de vídeo e RAM na abertura inicial; personalize abaixo quando quiser</span>
+          </div>
+
+          <!-- Detected Hardware & One-Click Auto-Configure Bar -->
+          <div class="perf-status-bar perf-hw-bar">
+            <div class="perf-status-info">
+              <span id="perf-hw-summary" class="perf-ram-value">Hardware: detectando CPU, GPU e RAM...</span>
+              <span id="perf-hw-reason" class="perf-mode-sub">Aplicando configuração inicial recomendada para o seu PC</span>
+            </div>
+            <button id="btn-auto-detect-perf" class="btn-subtle-action" type="button" title="Detectar hardware e reaplicar configuração recomendada">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/>
+              </svg>
+              <span>Auto-Configurar</span>
+            </button>
+          </div>
+
+          <!-- Switch Modo PC Fraco (Processador e Placa de Vídeo) -->
+          <div class="setting-row">
+            <div class="setting-text">
+              <label for="toggle-low-spec-mode" class="setting-label">Modo PC Fraco (Processador e Placa de Vídeo)</label>
+              <span class="setting-hint">Desativa desfoque glass, sombras e animações Canvas da interface, remove captura 120 Hz extra e ativa perfil leve</span>
+            </div>
+            <label class="cv-switch" for="toggle-low-spec-mode">
+              <input type="checkbox" id="toggle-low-spec-mode" role="switch" aria-checked="false" />
+              <span class="cv-switch-track" aria-hidden="true">
+                <span class="cv-switch-thumb"></span>
+              </span>
+            </label>
+          </div>
+
+          <!-- Switch Modo Pouca RAM -->
+          <div class="setting-row">
+            <div class="setting-text">
+              <label for="toggle-low-ram-mode" class="setting-label">Modo Pouca RAM (4 GB ou menos)</label>
+              <span class="setting-hint">Miniaturas 160x90 sem ícones pesados, libera prévias ao transmitir, limpa caches e limita heap V8 em 128 MB ao reiniciar</span>
+            </div>
+            <label class="cv-switch" for="toggle-low-ram-mode">
+              <input type="checkbox" id="toggle-low-ram-mode" role="switch" aria-checked="false" />
+              <span class="cv-switch-track" aria-hidden="true">
+                <span class="cv-switch-thumb"></span>
+              </span>
+            </label>
+          </div>
+
+          <!-- Switch Modo Compatibilidade GPU -->
+          <div class="setting-row">
+            <div class="setting-text">
+              <label for="toggle-compat-mode" class="setting-label">Modo Compatibilidade GPU (Tela Preta / Driver Antigo)</label>
+              <span class="setting-hint">Usa captura clássica sem textura D3D11 compartilhada e permite fallback por software ao reiniciar (útil para tela preta NVIDIA/Intel)</span>
+            </div>
+            <label class="cv-switch" for="toggle-compat-mode">
+              <input type="checkbox" id="toggle-compat-mode" role="switch" aria-checked="false" />
+              <span class="cv-switch-track" aria-hidden="true">
+                <span class="cv-switch-thumb"></span>
+              </span>
+            </label>
+          </div>
+
+          <!-- Live Memory Readout & Quick Trim / Restart Actions -->
+          <div class="perf-status-bar">
+            <div class="perf-status-info">
+              <span id="perf-ram-readout" class="perf-ram-value">Memória CastViewer: calculando...</span>
+              <span id="perf-mode-summary" class="perf-mode-sub">Modo padrão (60+ FPS completo com efeitos glass)</span>
+            </div>
+            <div class="perf-status-actions">
+              <button id="btn-restart-perf" class="btn-subtle-action btn-subtle-accent hidden" type="button" title="Reiniciar o CastViewer para aplicar modo de GPU ou RAM">
+                <span>Reiniciar App</span>
+              </button>
+              <button id="btn-trim-memory" class="btn-subtle-action" type="button" title="Limpar cache de imagens e liberar memória agora">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+                  <path d="M21 3v5h-5"/>
+                </svg>
+                <span>Limpar Cache</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Comportamento & Sistema -->
+        <div class="settings-card">
+          <div class="card-header">
+            <h3 class="card-title">Comportamento & Sistema</h3>
+            <span class="card-desc">Preferências de execução em segundo plano e informações técnicas</span>
+          </div>
+
+          <!-- Fire TV Remote Play/Pause switch -->
+          <div class="setting-row">
+            <div class="setting-text">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <label for="toggle-remote-pause" class="setting-label">Pausar pelo Controle do Fire TV</label>
+                <span class="badge-beta">ATIVO</span>
+              </div>
+              <span class="setting-hint">Permite pausar e retomar a transmissão e mídia do PC apertando Play/Pause no controle da TV</span>
+            </div>
+            <label class="cv-switch" for="toggle-remote-pause">
+              <input type="checkbox" id="toggle-remote-pause" checked role="switch" aria-checked="true" />
+              <span class="cv-switch-track" aria-hidden="true">
+                <span class="cv-switch-thumb"></span>
+              </span>
+            </label>
+          </div>
+
+          <!-- Auto-reconnect last TV switch -->
+          <div class="setting-row">
+            <div class="setting-text">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <label for="toggle-auto-reconnect" class="setting-label">Auto-selecionar última TV</label>
+                <span class="badge-beta">ATIVO</span>
+              </div>
+              <span class="setting-hint">Seleciona automaticamente o último Fire TV utilizado ao iniciar o app</span>
+            </div>
+            <label class="cv-switch" for="toggle-auto-reconnect">
+              <input type="checkbox" id="toggle-auto-reconnect" checked role="switch" aria-checked="true" />
+              <span class="cv-switch-track" aria-hidden="true">
+                <span class="cv-switch-thumb"></span>
+              </span>
+            </label>
+          </div>
+
+          <!-- Minimize to tray switch -->
+          <div class="setting-row">
+            <div class="setting-text">
+              <label for="toggle-minimize-tray" class="setting-label">Minimizar para a bandeja ao fechar</label>
+              <span class="setting-hint">Mantém a transmissão ativa em segundo plano caso a janela seja fechada</span>
+            </div>
+            <label class="cv-switch" for="toggle-minimize-tray">
+              <input type="checkbox" id="toggle-minimize-tray" checked role="switch" aria-checked="true" />
+              <span class="cv-switch-track" aria-hidden="true">
+                <span class="cv-switch-thumb"></span>
+              </span>
+            </label>
+          </div>
+
+          <!-- Replay Buffer 30s switch -->
+          <div class="setting-row">
+            <div class="setting-text">
+              <label for="toggle-replay-buffer" class="setting-label">Buffer Replay 30s ao transmitir</label>
+              <span class="setting-hint">Grava os últimos 15–30s em 2º plano para salvar Clip MP4 (desativado por padrão para preservar 60 FPS máximos)</span>
+            </div>
+            <label class="cv-switch" for="toggle-replay-buffer">
+              <input type="checkbox" id="toggle-replay-buffer" role="switch" aria-checked="false" />
+              <span class="cv-switch-track" aria-hidden="true">
+                <span class="cv-switch-thumb"></span>
+              </span>
+            </label>
+          </div>
+
+          <!-- Stream TV Clock + 4-Corner Position -->
+          <div class="setting-row">
+            <div class="setting-text">
+              <label for="toggle-stream-clock" class="setting-label">Mostrar relógio na TV ao transmitir</label>
+              <span class="setting-hint">Exibe a hora com segundos sobre a transmissão em um dos quatro cantos da tela da TV</span>
+            </div>
+            <label class="cv-switch" for="toggle-stream-clock">
+              <input type="checkbox" id="toggle-stream-clock" role="switch" aria-checked="false" />
+              <span class="cv-switch-track" aria-hidden="true">
+                <span class="cv-switch-thumb"></span>
+              </span>
+            </label>
+          </div>
+
+          <fieldset id="stream-clock-corner-group" class="clock-corner-fieldset" disabled>
+            <legend class="clock-corner-legend">Posição do relógio na tela da TV</legend>
+            <div class="clock-corner-grid">
+              <label class="clock-corner-option">
+                <input type="radio" name="stream-clock-corner" value="tl" />
+                <span>Superior Esq.</span>
+              </label>
+              <label class="clock-corner-option">
+                <input type="radio" name="stream-clock-corner" value="tr" />
+                <span>Superior Dir.</span>
+              </label>
+              <label class="clock-corner-option">
+                <input type="radio" name="stream-clock-corner" value="bl" />
+                <span>Inferior Esq.</span>
+              </label>
+              <label class="clock-corner-option">
+                <input type="radio" name="stream-clock-corner" value="br" checked />
+                <span>Inferior Dir.</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <!-- Technical Specs Banner -->
+          <div class="system-specs-grid">
+            <div class="spec-cell">
+              <span class="spec-label">Dispositivo</span>
+              <span id="system-hostname" class="spec-value">Desktop Windows</span>
+            </div>
+            <div class="spec-cell">
+              <span class="spec-label">Versão</span>
+              <span class="spec-value">CastViewer v1.0.0</span>
+            </div>
+            <div class="spec-cell">
+              <span class="spec-label">Protocolo</span>
+              <span class="spec-value">WebRTC LAN P2P H.264 / Opus</span>
+            </div>
+            <div class="spec-cell">
+              <span class="spec-label">Sinalização</span>
+              <span class="spec-value">WebSocket ws://port:8765</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Persistent Paused Stream Overlay (Manual Top-Layer Card synced with Fire TV) -->
+  <div id="paused-stream-overlay" class="paused-stream-overlay" popover="manual" role="status" aria-label="Transmissão Pausada">
+    <div class="paused-stream-card">
+      <div class="paused-stream-emblem" aria-hidden="true">
+        <span class="paused-bar"></span>
+        <span class="paused-bar"></span>
+      </div>
+      <div class="paused-stream-copy">
+        <div id="paused-overlay-kicker" class="paused-stream-kicker">CONTROLE FIRE TV • PAUSA</div>
+        <div id="paused-overlay-title" class="paused-stream-title">Transmissão Pausada</div>
+        <div id="paused-overlay-sub" class="paused-stream-sub">Vídeo congelado e áudio silenciado na TV</div>
+      </div>
+      <div class="paused-stream-actions">
+        <button id="btn-paused-resume" class="btn-paused-resume" type="button">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
+            <polygon points="6 4 20 12 6 20 6 4"/>
+          </svg>
+          <span id="btn-paused-resume-text">Retomar</span>
+        </button>
+        <button id="btn-paused-stop" class="btn-paused-stop" type="button" title="Encerrar transmissão" aria-label="Encerrar transmissão">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+            <rect x="5" y="5" width="14" height="14" rx="2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Screen Reader Context & Polite Status Region -->
+  <p class="inclusively-hidden">Status de transmissão</p>
+  <div id="sr-live-region" class="inclusively-hidden" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Minimalist Kinetic Precision Overlay (Connect / Switch Source / Disconnect) -->
+  <div id="hyper-cast-warp-overlay" class="hyper-cast-warp-overlay hidden" aria-hidden="true">
+    <canvas id="hyper-cast-warp-canvas" class="hyper-cast-warp-canvas"></canvas>
+    <div class="hyper-cast-hud">
+      <div class="hyper-cast-core-wrap">
+        <img id="hyper-cast-emblem" src="../assets/icon.png" alt="CastViewer" class="hyper-cast-emblem" />
+        <span id="hyper-cast-charge-pct" class="hyper-cast-charge-pct">0%</span>
+      </div>
+      <div class="hyper-cast-typography">
+        <div id="hyper-cast-header" class="hyper-cast-header">CONEXÃO DIRETA • 60 FPS</div>
+        <div id="hyper-cast-title" class="hyper-cast-title">Transmitindo para Fire TV</div>
+        <div id="hyper-cast-subtitle-pill" class="hyper-cast-subtitle-pill">
+          <span id="hyper-cast-subtitle-dot" class="hyper-cast-subtitle-dot"></span>
+          <span id="hyper-cast-subtitle">1080p • 60 FPS • Tempo Real</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Native Modal Preview Dialog for Clips & Screenshots -->
+  <dialog id="capture-preview-dialog" class="capture-preview-dialog" closedby="any" aria-labelledby="capture-preview-title">
+    <div class="capture-dialog-header">
+      <h2 id="capture-preview-title" class="capture-dialog-title">Visualizar Captura</h2>
+      <form method="dialog">
+        <button id="btn-close-preview-dialog" class="win-btn" type="submit" value="close" aria-label="Fechar visualização" title="Fechar">&times;</button>
+      </form>
+    </div>
+    <div id="capture-preview-stage" class="capture-preview-stage"></div>
+    <div class="capture-dialog-footer">
+      <span id="capture-preview-meta" class="capture-dialog-meta"></span>
+      <div class="capture-dialog-actions">
+        <button id="btn-dialog-reveal" class="btn-ghost" type="button">Mostrar na Pasta</button>
+        <form method="dialog">
+          <button class="btn-accent-sm" type="submit" value="close">Fechar</button>
+        </form>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Minimalist Kinetic Precision Startup Intro Overlay -->
+  <canvas id="cinematic-intro-canvas" style="position:fixed;inset:0;width:100vw;height:100vh;z-index:99999;pointer-events:none;background:#06070A;"></canvas>
+
+  <script src="replay-buffer.js"></script>
+  <script src="takeover-state.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

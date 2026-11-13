@@ -1,0 +1,73 @@
+{
+  "name": "castviewer",
+  "productName": "CastViewer",
+  "version": "1.0.0",
+  "description": "CastViewer - Espelhamento local ultra-rápido para Fire TV",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check main.js && node --check preload.js && node --check hardware-profile.js && node --check mp4-defragment.js && node --check renderer/replay-buffer.js && node --check renderer/takeover-state.js && node --check renderer/renderer.js && node --check renderer/pcm-worklet.js && node --test test/hardware-profile.test.js test/replay-buffer.test.js test/takeover-state.test.js test/mp4-defragment.test.js",
+    "build:win": "electron-builder --win dir",
+    "dist:win": "electron-builder --win nsis portable dir"
+  },
+  "keywords": [
+    "castviewer",
+    "firecast",
+    "webrtc",
+    "screen-sharing",
+    "firetv",
+    "electron"
+  ],
+  "author": "CastViewer Team",
+  "license": "MIT",
+  "dependencies": {
+    "bonjour-service": "^1.3.0",
+    "loopback-capture": "^4.0.0"
+  },
+  "devDependencies": {
+    "electron": "^45.3.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.castviewer.app",
+    "productName": "CastViewer",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "hardware-profile.js",
+      "mp4-defragment.js",
+      "renderer/**/*",
+      "assets/**/*",
+      "scripts/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/loopback-capture/**",
+      "node_modules/bindings/**",
+      "node_modules/file-uri-to-path/**",
+      "scripts/**"
+    ],
+    "win": {
+      "target": [
+        "dir"
+      ],
+      "icon": "assets/castviewer_v2.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CastViewer",
+      "installerIcon": "assets/castviewer_v2.ico",
+      "uninstallerIcon": "assets/castviewer_v2.ico"
+    },
+    "portable": {
+      "artifactName": "CastViewer-Portable-${version}.exe"
+    }
+  }
+}
