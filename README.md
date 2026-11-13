@@ -8,7 +8,7 @@ Ecossistema completo de espelhamento de tela e áudio **100% em rede local (LAN)
 | :--- | :--- | :--- | :--- |
 | [`firestick-app/`](./firestick-app) | **Fire TV / Android TV** (`minSdk 25`) | Receptor nativo Kotlin com decodificação por hardware (`MediaCodec` / H.264 / VP8), QR Code na tela e áudio HDMI em modo mídia. | `v2.4` (`versionCode 15`) |
 | [`android-sender/`](./android-sender) | **Android** (`minSdk 26`) | Emissor Jetpack Compose / Material 3 com `MediaProjection`, áudio interno, Clip Replay 30s, modo AMOLED, Tile rápido e bolha flutuante externa. | `v1.7.4` (`versionCode 13`) |
-| [`desktop-sender/`](./desktop-sender) | **Windows (Electron 45)** | Emissor para PC/Notebook com captura de tela/janela, áudio loopback WASAPI (`loopback-capture`), silenciamento inteligente de alto-falantes e Clip Replay. | `v1.0.0` |
+| [`desktop-sender/`](./desktop-sender) | **Windows & Linux (Electron 45)** | Emissor para PC/Notebook (`.exe`, `.AppImage`, `.deb`, `.tar.gz`) com captura de tela/janela (X11 e Wayland/PipeWire), áudio loopback WASAPI/PipeWire (`loopback-capture` + fallback `parec`), mute de alto-falantes e Clip Replay. | `v1.0.0` |
 
 ## Documentação Adicional
 
@@ -18,13 +18,23 @@ Ecossistema completo de espelhamento de tela e áudio **100% em rede local (LAN)
 
 ## Como Compilar a Partir do Código-Fonte
 
-### 1. Desktop Sender (Windows / Node.js)
+### 1. Desktop Sender (Windows & Linux / Node.js)
 ```bash
 cd desktop-sender
 npm install
 npm run check
+
+# Windows (.exe)
 npm run dist:win
+
+# Linux (.AppImage, .deb, .tar.gz)
+npm run dist:linux
 ```
+
+> **Notas para Linux:**
+> - **Áudio do sistema:** utiliza PipeWire nativo via `loopback-capture` (com fallback automático para `parec`/PulseAudio) e silenciamento de alto-falantes via `pactl`/`wpctl`.
+> - **Sessão Wayland / X11:** em X11 lista telas e janelas com prévia direta; em Wayland utiliza o seletor nativo via Portal PipeWire (`WebRTCPipeWireCapturer`).
+> - **AppImage em Ubuntu 24.04+:** caso o AppArmor restrinja o sandbox em AppImages locais, execute com `--no-sandbox` ou prefira o pacote `.deb`.
 
 ### 2. Android Sender
 ```bash
@@ -38,4 +48,4 @@ cd firestick-app
 ./gradlew testDebugUnitTest assembleDebug
 ```
 
-> Os instaladores prontos (`.apk` para Android/Fire TV e `.exe` para Windows) são disponibilizados na aba **Releases** do repositório.
+> Os instaladores prontos (`.apk` para Android/Fire TV, `.exe` para Windows e `.AppImage`/`.deb`/`.tar.gz` para Linux) são disponibilizados na aba **Releases** do repositório.

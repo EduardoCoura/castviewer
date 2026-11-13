@@ -27,6 +27,8 @@ release-apks/
 *.apk
 *.aab
 *.exe
+*.AppImage
+*.deb
 *.blockmap
 
 # OS & Temp

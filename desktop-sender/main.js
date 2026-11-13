@@ -9,15 +9,32 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { pathToFileURL } = require('url');
-const { exec } = require('child_process');
+const { exec, execFile, execFileSync, spawn } = require('child_process');
 const { Bonjour } = require('bonjour-service');
-const { LoopbackCapture } = require('loopback-capture');
+let LoopbackCapture = null;
+try {
+  ({ LoopbackCapture } = require('loopback-capture'));
+} catch (err) {
+  console.warn('CastViewer: Addon loopback-capture nativo indisponível:', err && err.message);
+}
 const { detectAndRecommendProfile, buildChromiumSwitches } = require('./hardware-profile');
 const { remuxReplayBufferToStandardMp4 } = require('./mp4-defragment');
 
+const IS_WIN = process.platform === 'win32';
+const IS_LINUX = process.platform === 'linux';
+const IS_WAYLAND_SESSION =
+  IS_LINUX &&
+  (process.env.XDG_SESSION_TYPE === 'wayland' || Boolean(process.env.WAYLAND_DISPLAY)) &&
+  app.commandLine.getSwitchValue('ozone-platform') !== 'x11';
+
 // Configure Product Identity
 app.setName('CastViewer');
-app.setAppUserModelId('com.castviewer.app');
+if (IS_WIN) {
+  app.setAppUserModelId('com.castviewer.app');
+}
+if (IS_LINUX && typeof app.setDesktopName === 'function') {
+  app.setDesktopName('castviewer.desktop');
+}
 
 // Persist Low-Spec, Low-RAM, Compatibility & Auto-Detected Hardware Profile in userData
 const DEFAULT_PERF_PREFS = {
@@ -112,8 +129,12 @@ if (!gotTheLock) {
   });
 }
 
-// Optimize Windows RAM Usage & Tune GPU Video Encoding / WGC Safety Per Detected Hardware
-const chromiumSwitchSpec = buildChromiumSwitches(perfPrefs);
+// Optimize RAM Usage & Tune GPU Video Encoding / Capture Safety Per Platform & Hardware
+const chromiumSwitchSpec = buildChromiumSwitches({
+  ...perfPrefs,
+  platform: process.platform,
+  wayland: IS_WAYLAND_SESSION
+});
 for (const [flag, value] of chromiumSwitchSpec.switches) {
   if (value !== undefined) {
     app.commandLine.appendSwitch(flag, value);
@@ -206,11 +227,14 @@ let bonjour = null;
 let bonjourBrowser = null;
 const discoveredDevices = new Map();
 
-// Active source selection for setDisplayMediaRequestHandler
+// Active source selection & Wayland portal state for setDisplayMediaRequestHandler
 let activeSourceId = null;
+let waylandPortalRequired = false;
+let displayMediaUsePicker = false;
 
-// Native loopback capture instance & notebook speaker mute tracking
+// Native loopback capture instance, Linux parec fallback & speaker mute tracking
 let loopbackCaptureInstance = null;
+let linuxParecProcess = null;
 let isSpeakerMutedByUs = false;
 let pendingBuffers = [];
 let pendingBytes = 0;
@@ -224,18 +248,43 @@ let streamingState = {
   deviceName: ''
 };
 
+function runCommandText(cmd, args, timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    execFile(
+      cmd,
+      args,
+      { timeout: timeoutMs, env: { ...process.env, LC_ALL: 'C', LANG: 'C' } },
+      (err, stdout) => {
+        if (err) return resolve({ ok: false, stdout: '' });
+        resolve({ ok: true, stdout: String(stdout || '') });
+      }
+    );
+  });
+}
+
 function getSpeakerMuteScriptPath() {
-  const fs = require('fs');
   const unpackedPath = path.join(__dirname.replace('app.asar', 'app.asar.unpacked'), 'scripts', 'speaker-mute.ps1');
   if (fs.existsSync(unpackedPath)) return unpackedPath;
   return path.join(__dirname, 'scripts', 'speaker-mute.ps1');
 }
 
-function getSpeakerMute() {
+async function getSpeakerMute() {
+  if (IS_LINUX) {
+    const pactlRes = await runCommandText('pactl', ['get-sink-mute', '@DEFAULT_SINK@'], 2500);
+    if (pactlRes.ok) {
+      return /\bMute:\s*yes\b/i.test(pactlRes.stdout);
+    }
+    const wpctlRes = await runCommandText('wpctl', ['get-volume', '@DEFAULT_AUDIO_SINK@'], 2500);
+    if (wpctlRes.ok) {
+      return /\[MUTED\]/i.test(wpctlRes.stdout);
+    }
+    return false;
+  }
+
+  if (!IS_WIN) return false;
+  const scriptPath = getSpeakerMuteScriptPath();
+  const psCommand = `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${scriptPath}" -Action get`;
   return new Promise((resolve) => {
-    if (process.platform !== 'win32') return resolve(false);
-    const scriptPath = getSpeakerMuteScriptPath();
-    const psCommand = `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${scriptPath}" -Action get`;
     exec(psCommand, { timeout: 3000 }, (err, stdout) => {
       if (err) return resolve(false);
       try {
@@ -248,12 +297,25 @@ function getSpeakerMute() {
   });
 }
 
-function setSpeakerMute(muted) {
+async function setSpeakerMute(muted) {
+  const wantMuted = Boolean(muted);
+  if (IS_LINUX) {
+    const val = wantMuted ? '1' : '0';
+    let ok = (await runCommandText('pactl', ['set-sink-mute', '@DEFAULT_SINK@', val], 2500)).ok;
+    if (!ok) {
+      ok = (await runCommandText('wpctl', ['set-mute', '@DEFAULT_AUDIO_SINK@', val], 2500)).ok;
+    }
+    if (ok) {
+      isSpeakerMutedByUs = wantMuted;
+    }
+    return ok;
+  }
+
+  if (!IS_WIN) return false;
+  const scriptPath = getSpeakerMuteScriptPath();
+  const action = wantMuted ? 'mute' : 'unmute';
+  const psCommand = `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${scriptPath}" -Action ${action}`;
   return new Promise((resolve) => {
-    if (process.platform !== 'win32') return resolve(false);
-    const scriptPath = getSpeakerMuteScriptPath();
-    const action = muted ? 'mute' : 'unmute';
-    const psCommand = `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${scriptPath}" -Action ${action}`;
     exec(psCommand, { timeout: 4000 }, (err, stdout) => {
       if (err) {
         console.warn('CastViewer: Falha ao alterar mudo dos alto-falantes:', err.message);
@@ -262,7 +324,7 @@ function setSpeakerMute(muted) {
       try {
         const res = JSON.parse(stdout.trim());
         if (res.success) {
-          isSpeakerMutedByUs = Boolean(muted);
+          isSpeakerMutedByUs = wantMuted;
         }
         resolve(Boolean(res.success));
       } catch (_) {
@@ -273,23 +335,40 @@ function setSpeakerMute(muted) {
 }
 
 function restoreSpeakerMuteSync() {
-  if (process.platform === 'win32' && isSpeakerMutedByUs) {
-    try {
+  if (!isSpeakerMutedByUs) return;
+  try {
+    if (IS_WIN) {
       const { execSync } = require('child_process');
       const scriptPath = getSpeakerMuteScriptPath();
       const psCommand = `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${scriptPath}" -Action unmute`;
       execSync(psCommand, { timeout: 3000 });
       isSpeakerMutedByUs = false;
-      console.log('CastViewer: Alto-falantes do notebook restaurados sincronicamente.');
-    } catch (e) {
-      console.warn('CastViewer: Erro ao restaurar alto-falantes no encerramento:', e.message);
+      console.log('CastViewer: Alto-falantes restaurados sincronicamente.');
+      return;
     }
+    if (IS_LINUX) {
+      const env = { ...process.env, LC_ALL: 'C', LANG: 'C' };
+      try {
+        execFileSync('pactl', ['set-sink-mute', '@DEFAULT_SINK@', '0'], { timeout: 2000, env });
+      } catch (_) {
+        execFileSync('wpctl', ['set-mute', '@DEFAULT_AUDIO_SINK@', '0'], { timeout: 2000, env });
+      }
+      isSpeakerMutedByUs = false;
+      console.log('CastViewer: Alto-falantes restaurados sincronicamente.');
+    }
+  } catch (e) {
+    console.warn('CastViewer: Erro ao restaurar alto-falantes no encerramento:', e.message);
   }
 }
 
-function triggerMediaPlayPause() {
+async function triggerMediaPlayPause() {
+  if (IS_LINUX) {
+    if ((await runCommandText('playerctl', ['play-pause'], 2000)).ok) return true;
+    return (await runCommandText('xdotool', ['key', 'XF86AudioPlay'], 2000)).ok;
+  }
+
+  if (!IS_WIN) return false;
   return new Promise((resolve) => {
-    if (process.platform !== 'win32') return resolve(false);
     const psCmd = `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Add-Type -MemberDefinition '[DllImport(\\"user32.dll\\")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);' -Name Win32Key -Namespace CastViewer; [CastViewer.Win32Key]::keybd_event(0xB3, 0, 0, 0); [CastViewer.Win32Key]::keybd_event(0xB3, 0, 2, 0);"`;
     exec(psCmd, { timeout: 2500 }, (err) => {
       if (err) {
@@ -338,9 +417,9 @@ function createWindow() {
     mainWindow.show();
   });
 
-  // When user closes window, if streaming & setting enabled, minimize to tray
+  // When user closes window, if streaming & setting enabled (and tray available), minimize to tray
   mainWindow.on('close', (event) => {
-    if (!app.isQuitting && streamingState.isStreaming && minimizeToTrayOnClose) {
+    if (!app.isQuitting && streamingState.isStreaming && minimizeToTrayOnClose && tray) {
       event.preventDefault();
       mainWindow.hide();
       if (tray && tray.displayBalloon) {
@@ -359,29 +438,34 @@ function createWindow() {
 
 // System Tray setup
 function createTray() {
-  const iconPath = path.join(__dirname, 'assets', process.platform === 'win32' ? 'castviewer_v2.ico' : 'icon.png');
-  const icon = nativeImage.createFromPath(iconPath);
-  tray = new Tray(icon);
-  tray.setToolTip('CastViewer - Espelhamento local ultra-rápido para Fire TV');
+  try {
+    const iconPath = path.join(__dirname, 'assets', IS_WIN ? 'castviewer_v2.ico' : 'icon.png');
+    const icon = nativeImage.createFromPath(iconPath);
+    tray = new Tray(icon);
+    tray.setToolTip('CastViewer - Espelhamento local ultra-rápido para Fire TV');
 
-  updateTrayMenu();
+    updateTrayMenu();
 
-  tray.on('click', () => {
-    if (mainWindow) {
-      if (mainWindow.isVisible()) {
-        mainWindow.focus();
-      } else {
-        mainWindow.show();
+    tray.on('click', () => {
+      if (mainWindow) {
+        if (mainWindow.isVisible()) {
+          mainWindow.focus();
+        } else {
+          mainWindow.show();
+        }
       }
-    }
-  });
+    });
 
-  tray.on('double-click', () => {
-    if (mainWindow) {
-      mainWindow.show();
-      mainWindow.focus();
-    }
-  });
+    tray.on('double-click', () => {
+      if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+  } catch (err) {
+    console.warn('CastViewer: Bandeja do sistema indisponível neste ambiente:', err && err.message);
+    tray = null;
+  }
 }
 
 function updateTrayMenu() {
@@ -445,40 +529,53 @@ function updateTrayMenu() {
   tray.setContextMenu(contextMenu);
 }
 
-// Setup DisplayMedia Request Handler for custom source
+// Setup DisplayMedia Request Handler (custom source on Windows/X11 or system portal on Wayland)
+function configureDisplayMediaHandler(useSystemPicker = false) {
+  const nextPicker = Boolean(useSystemPicker);
+  if (displayMediaUsePicker === nextPicker && session.defaultSession._cvDisplayMediaConfigured) {
+    return;
+  }
+  displayMediaUsePicker = nextPicker;
+  session.defaultSession._cvDisplayMediaConfigured = true;
+
+  session.defaultSession.setDisplayMediaRequestHandler(
+    async (_request, callback) => {
+      try {
+        const sources = await desktopCapturer.getSources({
+          types: ['screen', 'window']
+        });
+
+        let chosen = null;
+        if (activeSourceId && activeSourceId !== 'wayland-portal:0') {
+          chosen = sources.find((s) => s.id === activeSourceId);
+        }
+
+        // Fallback: gracefully pick first screen or window if activeSourceId wasn't found
+        if (!chosen && sources.length > 0) {
+          chosen = sources.find((s) => s.id.startsWith('screen:')) || sources[0];
+        }
+
+        if (chosen) {
+          callback({
+            video: chosen,
+            audio: undefined // Audio captured natively via loopback-capture + AudioWorklet!
+          });
+        } else {
+          callback({});
+        }
+      } catch (err) {
+        console.error('CastViewer: Erro em setDisplayMediaRequestHandler:', err);
+        callback({});
+      }
+    },
+    { useSystemPicker: nextPicker }
+  );
+}
+
 function setupDisplayMediaHandler() {
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(true));
   session.defaultSession.setPermissionCheckHandler(() => true);
-
-  session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
-    try {
-      const sources = await desktopCapturer.getSources({
-        types: ['screen', 'window']
-      });
-
-      let chosen = null;
-      if (activeSourceId) {
-        chosen = sources.find((s) => s.id === activeSourceId);
-      }
-
-      // Fallback: if activeSourceId is not set or not found in sources, gracefully fall back to sources[0]
-      if (!chosen && sources.length > 0) {
-        chosen = sources.find((s) => s.id.startsWith('screen:')) || sources[0];
-      }
-
-      if (chosen) {
-        callback({
-          video: chosen,
-          audio: undefined // Audio captured natively via loopback-capture + AudioWorklet!
-        });
-      } else {
-        callback({});
-      }
-    } catch (err) {
-      console.error('CastViewer: Erro em setDisplayMediaRequestHandler:', err);
-      callback({});
-    }
-  });
+  configureDisplayMediaHandler(false);
 }
 
 // Setup mDNS Discovery via bonjour-service (listening for _firecast._tcp)
@@ -603,10 +700,99 @@ function isPathInsideDirs(candidatePath, dirs) {
   });
 }
 
+function pushPcmChunk(chunk) {
+  if (!mainWindow || mainWindow.isDestroyed() || !chunk) return;
+  const len = chunk.byteLength || chunk.length || 0;
+  if (len <= 0) return;
+  pendingBuffers.push(chunk);
+  pendingBytes += len;
+  // Batch ~10ms (1920 bytes at 48kHz 16-bit stereo) to keep capture -> IPC latency minimal
+  if (pendingBytes >= 1920) {
+    const merged = pendingBuffers.length === 1 ? pendingBuffers[0] : Buffer.concat(pendingBuffers, pendingBytes);
+    pendingBuffers = [];
+    pendingBytes = 0;
+    mainWindow.webContents.send('audio-pcm-chunk', merged);
+  }
+}
+
+function stopAllLoopbackAudio() {
+  pendingBuffers = [];
+  pendingBytes = 0;
+  if (loopbackCaptureInstance) {
+    try { loopbackCaptureInstance.stop(); } catch (_) {}
+    loopbackCaptureInstance = null;
+  }
+  if (linuxParecProcess) {
+    try { linuxParecProcess.kill('SIGTERM'); } catch (_) {}
+    linuxParecProcess = null;
+  }
+}
+
+async function startLinuxParecFallback() {
+  const sinkRes = await runCommandText('pactl', ['get-default-sink'], 1500);
+  const sinkName = sinkRes.ok ? sinkRes.stdout.trim().split(/\r?\n/)[0].trim() : '';
+  const monitorSource = sinkName ? `${sinkName}.monitor` : '@DEFAULT_MONITOR@';
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const child = spawn(
+      'parec',
+      ['--format=s16le', '--rate=48000', '--channels=2', '--raw', '--latency-msec=10', '-d', monitorSource],
+      { stdio: ['ignore', 'pipe', 'pipe'] }
+    );
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        linuxParecProcess = child;
+        console.log(`CastViewer: Loopback áudio Linux via parec (${monitorSource}).`);
+        resolve(true);
+      }
+    }, 150);
+
+    child.stdout.on('data', (chunk) => pushPcmChunk(chunk));
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      console.warn('CastViewer: Fallback parec indisponível:', err && err.message);
+      if (linuxParecProcess === child) linuxParecProcess = null;
+      if (!settled) {
+        settled = true;
+        resolve(false);
+      }
+    });
+    child.on('close', () => {
+      clearTimeout(timer);
+      if (linuxParecProcess === child) linuxParecProcess = null;
+      if (!settled) {
+        settled = true;
+        resolve(false);
+      }
+    });
+  });
+}
+
+function getWaylandPortalSources() {
+  return [
+    {
+      id: 'wayland-portal:0',
+      name: 'Tela ou Janela (Seletor PipeWire / Wayland)',
+      thumbnail: '',
+      appIcon: null,
+      display_id: '0',
+      isScreen: true,
+      isPortalPicker: true
+    }
+  ];
+}
+
 // IPC Handlers
 function setupIpc() {
   // Capture Sources (Screens & Windows)
   ipcMain.handle('get-sources', async (_event, options) => {
+    if (IS_LINUX && IS_WAYLAND_SESSION && waylandPortalRequired) {
+      return getWaylandPortalSources();
+    }
+
     try {
       const useLowRam = Boolean((options && options.lowRam) || perfPrefs.lowRamMode);
       const sources = await desktopCapturer.getSources({
@@ -629,10 +815,19 @@ function setupIpc() {
           isScreen: s.id.startsWith('screen:')
         }));
 
+      if (mapped.length === 0 && IS_LINUX && IS_WAYLAND_SESSION) {
+        waylandPortalRequired = true;
+        return getWaylandPortalSources();
+      }
+
       // Sort screens first, then open windows preserving native z-order
       return mapped.sort((a, b) => Number(b.isScreen) - Number(a.isScreen));
     } catch (err) {
       console.error('CastViewer: Falha ao obter fontes desktopCapturer:', err);
+      if (IS_LINUX && IS_WAYLAND_SESSION) {
+        waylandPortalRequired = true;
+        return getWaylandPortalSources();
+      }
       return [];
     }
   });
@@ -644,6 +839,7 @@ function setupIpc() {
       return false;
     }
     activeSourceId = sourceId;
+    configureDisplayMediaHandler(IS_LINUX && IS_WAYLAND_SESSION && sourceId === 'wayland-portal:0');
     return true;
   });
 
@@ -712,10 +908,7 @@ function setupIpc() {
     } catch (_) {}
 
     if (!streamingState.isStreaming) {
-      if (loopbackCaptureInstance) {
-        try { loopbackCaptureInstance.stop(); } catch (_) {}
-        loopbackCaptureInstance = null;
-      }
+      stopAllLoopbackAudio();
       if (isSpeakerMutedByUs) {
         await setSpeakerMute(false);
       }
@@ -728,55 +921,47 @@ function setupIpc() {
   });
 
   // Native Loopback Audio Capture (48kHz 16-bit PCM before speaker mute)
-  // If FxSound is running, exclude its PID to avoid capturing duplicate delayed DSP audio
+  // On Windows, exclude FxSound or own PID to prevent echo; on Linux omit excludePid so PipeWire sink capture never skips sandboxed/Flatpak apps.
   ipcMain.handle('start-process-audio', async () => {
-    try {
-      if (loopbackCaptureInstance) {
-        try { loopbackCaptureInstance.stop(); } catch (_) {}
-        loopbackCaptureInstance = null;
-      }
-      const fxSoundPid = await getFxSoundPid();
-      const excludePid = fxSoundPid || process.pid;
+    stopAllLoopbackAudio();
 
-      pendingBuffers = [];
-      pendingBytes = 0;
-
-      loopbackCaptureInstance = new LoopbackCapture();
-      loopbackCaptureInstance.startSystemAudio((chunk) => {
-        if (!mainWindow || mainWindow.isDestroyed()) return;
-        pendingBuffers.push(chunk);
-        pendingBytes += chunk.byteLength || chunk.length || 0;
-        // Batch ~10ms (1920 bytes at 48kHz 16-bit stereo) to cut capture->IPC buffering delay in half
-        if (pendingBytes >= 1920) {
-          const merged = pendingBuffers.length === 1 ? pendingBuffers[0] : Buffer.concat(pendingBuffers, pendingBytes);
-          pendingBuffers = [];
-          pendingBytes = 0;
-          mainWindow.webContents.send('audio-pcm-chunk', merged);
+    if (LoopbackCapture) {
+      try {
+        loopbackCaptureInstance = new LoopbackCapture();
+        if (IS_LINUX) {
+          loopbackCaptureInstance.startSystemAudio((chunk) => pushPcmChunk(chunk));
+          console.log('CastViewer: LoopbackCapture iniciado (Linux PipeWire default sink).');
+        } else {
+          const fxSoundPid = await getFxSoundPid();
+          const excludePid = fxSoundPid || process.pid;
+          loopbackCaptureInstance.startSystemAudio((chunk) => pushPcmChunk(chunk), excludePid);
+          console.log(
+            `CastViewer: LoopbackCapture iniciado (excluindo PID: ${excludePid}${fxSoundPid ? ' [FxSound.exe detectado - evitando eco]' : ' [process.pid]'})`
+          );
         }
-      }, excludePid);
-      console.log(`CastViewer: LoopbackCapture iniciado (excluindo PID: ${excludePid}${fxSoundPid ? ' [FxSound.exe detectado - evitando eco]' : ' [process.pid]'})`);
-      return true;
-    } catch (err) {
-      console.error('CastViewer: Falha ao iniciar LoopbackCapture:', err);
-      return false;
+        return true;
+      } catch (err) {
+        console.warn('CastViewer: LoopbackCapture falhou ao iniciar:', err && err.message);
+        stopAllLoopbackAudio();
+      }
     }
+
+    if (IS_LINUX) {
+      return await startLinuxParecFallback();
+    }
+    return false;
   });
 
   ipcMain.handle('stop-process-audio', async () => {
     try {
-      pendingBuffers = [];
-      pendingBytes = 0;
-      if (loopbackCaptureInstance) {
-        loopbackCaptureInstance.stop();
-        loopbackCaptureInstance = null;
-        console.log('CastViewer: LoopbackCapture finalizado.');
-      }
+      stopAllLoopbackAudio();
       if (isSpeakerMutedByUs) {
         await setSpeakerMute(false);
       }
+      console.log('CastViewer: Loopback de áudio finalizado.');
       return true;
     } catch (err) {
-      console.warn('CastViewer: Erro ao parar LoopbackCapture:', err);
+      console.warn('CastViewer: Erro ao parar captura de áudio:', err);
       return false;
     }
   });
@@ -885,12 +1070,18 @@ function setupIpc() {
   });
 
   ipcMain.handle('window-hide-to-tray', () => {
-    if (mainWindow) mainWindow.hide();
+    if (mainWindow) {
+      if (tray) {
+        mainWindow.hide();
+      } else {
+        mainWindow.minimize();
+      }
+    }
   });
 
   ipcMain.handle('window-close', () => {
     if (mainWindow) {
-      if (streamingState.isStreaming && minimizeToTrayOnClose) {
+      if (streamingState.isStreaming && minimizeToTrayOnClose && tray) {
         mainWindow.hide();
       } else {
         mainWindow.close();
@@ -900,7 +1091,7 @@ function setupIpc() {
 
   // Hostname
   ipcMain.handle('get-hostname', () => {
-    return os.hostname() || 'Desktop Windows';
+    return os.hostname() || (IS_LINUX ? 'Desktop Linux' : 'Desktop Windows');
   });
 
   // Desktop Captures: Save Screenshot PNG (Pictures/CastViewer)
@@ -1122,10 +1313,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   app.isQuitting = true;
-  if (loopbackCaptureInstance) {
-    try { loopbackCaptureInstance.stop(); } catch (_) {}
-    loopbackCaptureInstance = null;
-  }
+  stopAllLoopbackAudio();
   restoreSpeakerMuteSync();
   if (bonjourBrowser) {
     try {

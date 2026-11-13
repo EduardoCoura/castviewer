@@ -1,0 +1,92 @@
+name: Build & Release CastViewer Linux
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to attach Linux packages to'
+        required: true
+        default: 'v1.0.0'
+      upload_to_release:
+        description: 'Upload generated binaries to GitHub Release'
+        required: true
+        type: boolean
+        default: true
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: desktop-sender/package-lock.json
+
+      - name: Install PipeWire runtime for native loopback verification
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpipewire-0.3-0t64 || sudo apt-get install -y libpipewire-0.3-0
+
+      - name: Install desktop-sender dependencies
+        working-directory: desktop-sender
+        run: npm ci
+
+      - name: Run syntax checks & unit tests on Linux
+        working-directory: desktop-sender
+        run: npm run check
+
+      - name: Smoke-test native loopback-capture Linux addon
+        working-directory: desktop-sender
+        run: |
+          node -e "const { LoopbackCapture } = require('loopback-capture'); const cap = new LoopbackCapture(); if (!cap || typeof cap.startSystemAudio !== 'function') process.exit(1); console.log('Linux LoopbackCapture addon loaded OK');"
+
+      - name: Build Linux packages (AppImage, deb, tar.gz)
+        working-directory: desktop-sender
+        run: npx electron-builder --linux AppImage deb tar.gz --publish never
+
+      - name: Verify built Linux artifacts and .deb metadata
+        working-directory: desktop-sender
+        run: |
+          ls -lh dist/
+          test -f dist/linux-unpacked/resources/app.asar.unpacked/node_modules/loopback-capture/prebuilds/linux-x64/loopback_capture_addon.node
+          dpkg-deb --info dist/*.deb
+          ls -1 dist/*.AppImage dist/*.deb dist/*.tar.gz
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: castviewer-linux-packages
+          path: |
+            desktop-sender/dist/*.AppImage
+            desktop-sender/dist/*.deb
+            desktop-sender/dist/*.tar.gz
+
+      - name: Upload Linux packages to GitHub Release
+        if: |
+          (github.event_name == 'workflow_dispatch' && inputs.upload_to_release == true) ||
+          startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: |
+          if gh release view "$TARGET_TAG" >/dev/null 2>&1; then
+            gh release upload "$TARGET_TAG" \
+              desktop-sender/dist/*.AppImage \
+              desktop-sender/dist/*.deb \
+              desktop-sender/dist/*.tar.gz \
+              --clobber
+          else
+            echo "Release $TARGET_TAG not found yet; skipping automatic upload."
+          fi

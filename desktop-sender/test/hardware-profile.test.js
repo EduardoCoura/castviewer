@@ -219,4 +219,42 @@ test('buildChromiumSwitches enables low-latency WebRTC field trials safely outsi
   assert.equal(compat.switches.find(([flag]) => flag === 'force-fieldtrials'), undefined);
 });
 
+test('Linux X11/Wayland switches omit d3d11 and Win32 MediaFoundation flags while enabling PipeWire', () => {
+  const linuxX11 = buildChromiumSwitches({
+    platform: 'linux',
+    wayland: false,
+    compatMode: false,
+    lowSpecMode: false,
+    lowRamMode: false
+  });
+  assert.equal(linuxX11.switches.find(([flag]) => flag === 'use-angle'), undefined);
+  assert.equal(linuxX11.switches.find(([flag]) => flag === 'ozone-platform-hint'), undefined);
+  assert.ok(!linuxX11.enableFeatures.includes('MediaFoundationVideoEncodeAccelerator'));
+  assert.ok(linuxX11.enableFeatures.includes('WebRTCPipeWireCapturer'));
+  assert.ok(linuxX11.enableFeatures.includes('VaapiVideoEncoder'));
+  assert.ok(!linuxX11.disableFeatures.includes('WebRtcScreenshareSwEncoding'));
+
+  const linuxWayland = buildChromiumSwitches({
+    platform: 'linux',
+    wayland: true,
+    compatMode: false,
+    lowSpecMode: false,
+    lowRamMode: false
+  });
+  assert.deepEqual(
+    linuxWayland.switches.find(([flag]) => flag === 'ozone-platform-hint'),
+    ['ozone-platform-hint', 'auto']
+  );
+
+  const linuxCompat = buildChromiumSwitches({
+    platform: 'linux',
+    wayland: true,
+    compatMode: true
+  });
+  assert.ok(linuxCompat.enableFeatures.includes('WebRTCPipeWireCapturer'));
+  assert.equal(linuxCompat.switches.find(([flag]) => flag === 'force-fieldtrials'), undefined);
+  assert.ok(!linuxCompat.disableFeatures.includes('WebRtcAllowWgcDesktopCapture'));
+});
+
+
 

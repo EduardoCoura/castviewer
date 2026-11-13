@@ -62,7 +62,7 @@ let prevBytesSent = 0;
 let prevStatsTimestamp = 0;
 let prevPacketsSent = 0;
 let prevPacketsLost = 0;
-let pcHostname = 'Desktop Windows';
+let pcHostname = 'Desktop';
 
 // Native Audio (loopback-capture + pcm-worklet) & Notebook Speaker Mute State
 let audioCtx = null;
@@ -2818,6 +2818,10 @@ async function acquireDesktopVideoStream(sourceId, width, height, targetFps, fal
     audio: false // System audio is captured cleanly via loopback-capture + pcm-worklet!
   };
 
+  if (sourceId === 'wayland-portal:0') {
+    return await navigator.mediaDevices.getDisplayMedia(displayConstraints);
+  }
+
   try {
     // Attempt 1: Direct Electron desktop capture via getUserMedia with minFrameRate = targetFps
     return await navigator.mediaDevices.getUserMedia({
@@ -3624,7 +3628,7 @@ function startStatsPolling() {
       if (advBitrate && bitrateMbps !== null) advBitrate.textContent = `${bitrateMbps} Mbps`;
       if (advResolution && frameW && frameH) advResolution.textContent = `${frameW}x${frameH}`;
       if (advCodec && encoderImpl) {
-        const isHw = /MediaFoundation|NVENC|AMF|QuickSync|ExternalEncoder/i.test(encoderImpl);
+        const isHw = /MediaFoundation|NVENC|AMF|QuickSync|VAAPI|V4L2|ExternalEncoder/i.test(encoderImpl);
         advCodec.textContent = isHw ? 'H.264 (HW)' : 'H.264';
       }
       if (advCodecSub) {

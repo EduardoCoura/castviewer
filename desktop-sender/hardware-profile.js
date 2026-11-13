@@ -203,6 +203,9 @@ function buildChromiumSwitches(prefs = {}) {
   const lowRamMode = Boolean(prefs.lowRamMode);
   const compatMode = Boolean(prefs.compatMode);
   const hybridGpuDetected = Boolean(prefs.hybridGpuDetected);
+  const platform = prefs.platform || 'win32';
+  const isLinux = platform === 'linux';
+  const isWayland = isLinux && Boolean(prefs.wayland);
 
   const switches = [
     ['renderer-process-limit', '1'],
@@ -218,30 +221,46 @@ function buildChromiumSwitches(prefs = {}) {
     switches.push(['media-cache-size', '10485760']);
   }
 
+  const baseDisableFeatures = [
+    'MediaRouter',
+    'OptimizationHints',
+    'Translate',
+    'AutofillServerCommunication',
+    'CalculateNativeWinOcclusion'
+  ];
+
   if (compatMode) {
     // Safe fallback for hybrid laptop DXGI issues, old drivers, or virtual adapters:
-    // disables WGC shared-texture + WGC capture forcing (uses Desktop Duplication / GDI)
-    // and keeps WebRTC software H.264 fallback unlocked.
-    const disableFeatures = [
-      'MediaRouter',
-      'OptimizationHints',
-      'Translate',
-      'AutofillServerCommunication',
-      'CalculateNativeWinOcclusion',
-      'WebRtcWgcRequireBorder',
-      'WebRtcAllowWgcUsingTexture',
-      'WebRtcAllowWgcDesktopCapture'
-    ];
+    // disables WGC shared-texture + WGC capture forcing on Windows and keeps WebRTC software H.264 unlocked.
+    const disableFeatures = isLinux
+      ? [...baseDisableFeatures]
+      : [
+          ...baseDisableFeatures,
+          'WebRtcWgcRequireBorder',
+          'WebRtcAllowWgcUsingTexture',
+          'WebRtcAllowWgcDesktopCapture'
+        ];
+    const enableFeatures = isWayland ? ['WebRTCPipeWireCapturer'] : [];
+    if (isWayland) {
+      switches.push(['ozone-platform-hint', 'auto']);
+      switches.push(['enable-features', enableFeatures.join(',')]);
+    }
     switches.push(['disable-features', disableFeatures.join(',')]);
     return {
       switches,
-      enableFeatures: [],
+      enableFeatures,
       disableFeatures
     };
   }
 
   switches.push(['ignore-gpu-blocklist']);
-  switches.push(['use-angle', 'd3d11']);
+  if (isLinux) {
+    if (isWayland) {
+      switches.push(['ozone-platform-hint', 'auto']);
+    }
+  } else {
+    switches.push(['use-angle', 'd3d11']);
+  }
   if (!lowSpecMode && !lowRamMode) {
     switches.push(['enable-gpu-rasterization']);
   }
@@ -249,24 +268,28 @@ function buildChromiumSwitches(prefs = {}) {
   switches.push(['enable-accelerated-video-decode']);
   switches.push(['enable-accelerated-video-encode']);
 
-  // Omit MediaFoundationUseSWBRCForH264Desktop / ForceAMDGPU: triggers Chromium 0xC000001D
-  // renderer crashes when MediaRecorder + WebRTC desktop capture run concurrently on AMD GPUs.
-  const enableFeatures = [
-    'MediaFoundationVideoEncodeAccelerator'
-  ];
-  if (!hybridGpuDetected) {
-    enableFeatures.push('WebRtcAllowWgcUsingTexture');
+  let enableFeatures;
+  let disableFeatures;
+  if (isLinux) {
+    enableFeatures = ['WebRTCPipeWireCapturer'];
+    if (!lowSpecMode) {
+      enableFeatures.push('VaapiVideoEncoder');
+    }
+    // Keep OpenH264 software H.264 fallback unlocked on Linux distros without VA-API drivers
+    disableFeatures = [...baseDisableFeatures];
+  } else {
+    // Omit MediaFoundationUseSWBRCForH264Desktop / ForceAMDGPU: triggers Chromium 0xC000001D
+    // renderer crashes when MediaRecorder + WebRTC desktop capture run concurrently on AMD GPUs.
+    enableFeatures = ['MediaFoundationVideoEncodeAccelerator'];
+    if (!hybridGpuDetected) {
+      enableFeatures.push('WebRtcAllowWgcUsingTexture');
+    }
+    disableFeatures = [
+      ...baseDisableFeatures,
+      'WebRtcScreenshareSwEncoding',
+      'WebRtcWgcRequireBorder'
+    ];
   }
-
-  const disableFeatures = [
-    'MediaRouter',
-    'OptimizationHints',
-    'Translate',
-    'AutofillServerCommunication',
-    'CalculateNativeWinOcclusion',
-    'WebRtcScreenshareSwEncoding',
-    'WebRtcWgcRequireBorder'
-  ];
 
   switches.push(['enable-features', enableFeatures.join(',')]);
   switches.push(['disable-features', disableFeatures.join(',')]);
