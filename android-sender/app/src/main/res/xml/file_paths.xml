@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <external-files-path name="ext_movies" path="Movies/CastViewer/" />
+    <external-files-path name="ext_pictures" path="Pictures/CastViewer/" />
+    <files-path name="internal_media" path="CastViewer/" />
+    <cache-path name="cache_media" path="." />
+</paths>

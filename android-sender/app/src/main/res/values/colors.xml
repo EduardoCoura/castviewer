@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="cv_bg_canvas">#0E0F13</color>
+    <color name="cv_bg_surface">#1B1D24</color>
+    <color name="cv_bg_inset">#15161C</color>
+    <color name="cv_nav_surface">#2D2F33</color>
+    <color name="cv_fire_orange">#FF5A1F</color>
+    <color name="cv_text_primary">#F4F4F7</color>
+</resources>

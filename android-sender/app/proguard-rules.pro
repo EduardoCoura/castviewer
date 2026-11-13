@@ -1,0 +1,10 @@
+-keep class org.webrtc.** { *; }
+-dontwarn org.webrtc.**
+-keep class org.java_websocket.** { *; }
+-dontwarn org.java_websocket.**
+-keep class com.google.zxing.** { *; }
+-dontwarn com.google.zxing.**
+-keep class androidx.camera.** { *; }
+-dontwarn androidx.camera.**
+-keep class com.castviewer.sender.model.** { *; }
+-keepattributes Signature,InnerClasses,EnclosingMethod

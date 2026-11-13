@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CastViewer</string>
+    <string name="notif_channel_name">Transmissão de Tela</string>
+    <string name="notif_channel_desc">Mantém o espelhamento de tela e áudio ativo para o Fire Stick</string>
+</resources>
