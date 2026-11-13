@@ -1,0 +1,38 @@
+# Node / Electron (desktop-sender)
+node_modules/
+desktop-sender/dist/
+desktop-sender/out/
+npm-debug.log*
+yarn-debug.log*
+*.log
+
+# Android & Fire TV Gradle
+.gradle/
+**/build/
+local.properties
+captures/
+*.iml
+.idea/
+.cxx/
+*.hprof
+
+# Keystores & Signing Secrets
+*.jks
+*.keystore
+*.p12
+*.pfx
+
+# Release Binaries (attached to GitHub Releases instead of Git history)
+release-apks/
+*.apk
+*.aab
+*.exe
+*.blockmap
+
+# OS & Temp
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+.env
+.env.*
