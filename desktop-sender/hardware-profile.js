@@ -7,6 +7,7 @@
 const VENDOR_IDS = {
   AMD: 0x1002,
   AMD_ALT: 0x1022,
+  APPLE: 0x106b,
   NVIDIA: 0x10de,
   INTEL: 0x8086,
   MICROSOFT: 0x1414
@@ -45,6 +46,7 @@ function classifyGpuDeviceVendor(device) {
   const name = String((device && (device.deviceString || device.driverVendor)) || '');
 
   if (vid === VENDOR_IDS.NVIDIA || /nvidia/i.test(name)) return 'nvidia';
+  if (vid === VENDOR_IDS.APPLE || /\bapple\b/i.test(name)) return 'apple';
   if (vid === VENDOR_IDS.AMD || vid === VENDOR_IDS.AMD_ALT || /\b(amd|ati|radeon)\b/i.test(name)) {
     return 'amd';
   }
@@ -90,6 +92,7 @@ function detectAndRecommendProfile({ cpus = [], totalMemBytes = 0, gpuInfo = nul
   const realOrListedGpus = hardwareGpus.length > 0 ? hardwareGpus : normalizedGpus;
 
   const hasNvidia = hardwareGpus.some((g) => g.vendor === 'nvidia');
+  const hasApple = hardwareGpus.some((g) => g.vendor === 'apple');
   const hasIntel = hardwareGpus.some((g) => g.vendor === 'intel');
   const hasAmd = hardwareGpus.some((g) => g.vendor === 'amd');
 
@@ -136,8 +139,8 @@ function detectAndRecommendProfile({ cpus = [], totalMemBytes = 0, gpuInfo = nul
     LEGACY_WEAK_GPU_RE.test(gpuSummary);
 
   const isLimitedIntegrated =
-    (!hasNvidia && threads <= 4) ||
-    (!hasNvidia && hasIntel && threads < 8 && !/\b(Iris|Arc)\b/i.test(gpuSummary));
+    (!hasNvidia && !hasApple && threads <= 4) ||
+    (!hasNvidia && !hasApple && hasIntel && threads < 8 && !/\b(Iris|Arc)\b/i.test(gpuSummary));
 
   let tier = 'high';
   let lowSpecMode = false;
@@ -175,6 +178,7 @@ function detectAndRecommendProfile({ cpus = [], totalMemBytes = 0, gpuInfo = nul
       gpuSummary,
       primaryVendor: primaryGpu.vendor,
       hasNvidia,
+      hasApple,
       hasIntel,
       hasAmd,
       isHybridGpu,
@@ -205,6 +209,8 @@ function buildChromiumSwitches(prefs = {}) {
   const hybridGpuDetected = Boolean(prefs.hybridGpuDetected);
   const platform = prefs.platform || 'win32';
   const isLinux = platform === 'linux';
+  const isMac = platform === 'darwin';
+  const isWin = !isLinux && !isMac;
   const isWayland = isLinux && Boolean(prefs.wayland);
 
   const switches = [
@@ -229,20 +235,32 @@ function buildChromiumSwitches(prefs = {}) {
     'CalculateNativeWinOcclusion'
   ];
 
+  const MAC_LOOPBACK_FEATURES = [
+    'MacLoopbackAudioForScreenShare',
+    'MacCatapSystemAudioLoopbackCapture',
+    'MacSckSystemAudioLoopbackOverride'
+  ];
+
   if (compatMode) {
     // Safe fallback for hybrid laptop DXGI issues, old drivers, or virtual adapters:
     // disables WGC shared-texture + WGC capture forcing on Windows and keeps WebRTC software H.264 unlocked.
-    const disableFeatures = isLinux
-      ? [...baseDisableFeatures]
-      : [
+    const disableFeatures = isWin
+      ? [
           ...baseDisableFeatures,
           'WebRtcWgcRequireBorder',
           'WebRtcAllowWgcUsingTexture',
           'WebRtcAllowWgcDesktopCapture'
-        ];
-    const enableFeatures = isWayland ? ['WebRTCPipeWireCapturer'] : [];
+        ]
+      : [...baseDisableFeatures];
+    const enableFeatures = isWayland
+      ? ['WebRTCPipeWireCapturer']
+      : isMac
+        ? [...MAC_LOOPBACK_FEATURES]
+        : [];
     if (isWayland) {
       switches.push(['ozone-platform-hint', 'auto']);
+    }
+    if (enableFeatures.length > 0) {
       switches.push(['enable-features', enableFeatures.join(',')]);
     }
     switches.push(['disable-features', disableFeatures.join(',')]);
@@ -258,7 +276,7 @@ function buildChromiumSwitches(prefs = {}) {
     if (isWayland) {
       switches.push(['ozone-platform-hint', 'auto']);
     }
-  } else {
+  } else if (isWin) {
     switches.push(['use-angle', 'd3d11']);
   }
   if (!lowSpecMode && !lowRamMode) {
@@ -276,6 +294,10 @@ function buildChromiumSwitches(prefs = {}) {
       enableFeatures.push('VaapiVideoEncoder');
     }
     // Keep OpenH264 software H.264 fallback unlocked on Linux distros without VA-API drivers
+    disableFeatures = [...baseDisableFeatures];
+  } else if (isMac) {
+    // Native macOS VideoToolbox hardware encoding + ScreenCaptureKit / CoreAudio system loopback
+    enableFeatures = [...MAC_LOOPBACK_FEATURES];
     disableFeatures = [...baseDisableFeatures];
   } else {
     // Omit MediaFoundationUseSWBRCForH264Desktop / ForceAMDGPU: triggers Chromium 0xC000001D

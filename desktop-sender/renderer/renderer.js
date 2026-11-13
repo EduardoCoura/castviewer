@@ -63,6 +63,16 @@ let prevStatsTimestamp = 0;
 let prevPacketsSent = 0;
 let prevPacketsLost = 0;
 let pcHostname = 'Desktop';
+let systemCapabilities = {
+  platform: 'win32',
+  isWin: true,
+  isMac: false,
+  isLinux: false,
+  isWayland: false,
+  hasNativeLoopback: true,
+  screenPermission: 'granted'
+};
+let usingDisplayMediaAudioLoopback = false;
 
 // Native Audio (loopback-capture + pcm-worklet) & Notebook Speaker Mute State
 let audioCtx = null;
@@ -394,6 +404,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (_) {}
   })();
 
+  const capsTask = (async () => {
+    try {
+      if (api.getSystemCapabilities) {
+        const caps = await api.getSystemCapabilities();
+        if (caps && typeof caps === 'object') {
+          systemCapabilities = { ...systemCapabilities, ...caps };
+        }
+      }
+    } catch (_) {}
+  })();
+
   const hostnameTask = (async () => {
     try {
       if (api.getHostname) {
@@ -423,9 +444,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (_) {}
   })();
 
+  await capsTask;
   const initialSourcesTask = (async () => {
     await refreshSources();
-    if (captureSources.length === 0) {
+    if (captureSources.length === 0 && !systemCapabilities.isWayland) {
       setTimeout(() => {
         if (!isTransmitting && !isConnecting && captureSources.length === 0) {
           refreshSources();
@@ -433,6 +455,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       }, 900);
     }
   })();
+
+  if (systemCapabilities.isMac && systemCapabilities.screenPermission && systemCapabilities.screenPermission !== 'granted') {
+    showToast('No macOS, autorize Gravação de Tela em Ajustes do Sistema > Privacidade e Segurança.', 'info');
+  }
 
   startSourcesRefreshLoop();
   await Promise.allSettled([
@@ -480,6 +506,9 @@ let sourcesRefreshInterval = null;
 let currentNavTab = 'stream';
 
 function shouldRefreshSources() {
+  if (systemCapabilities && systemCapabilities.isWayland) {
+    return false;
+  }
   return !document.hidden && currentNavTab === 'stream';
 }
 
@@ -1153,6 +1182,23 @@ function renderSourcesList(pulseSelectedId = null) {
 
     const selectHandler = async () => {
       if (isConnecting) return;
+
+      if (source.id === 'wayland-portal:reselect') {
+        const api = getApi();
+        if (isTransmitting) {
+          await swapSourceLive(source);
+          return;
+        }
+        if (api.selectSource) {
+          await api.selectSource('wayland-portal:reselect', false);
+        }
+        selectedSourceId = 'wayland-portal:0';
+        await refreshSources();
+        playSourceSwitchAnimation('Portal Wayland', false, false);
+        showToast('Nova escolha de tela Wayland será solicitada ao iniciar.', 'info');
+        return;
+      }
+
       if (selectedSourceId === source.id) return;
 
       const isWindowSource = !source.isScreen || String(source.id).startsWith('window:');
@@ -1186,9 +1232,11 @@ function renderSourcesList(pulseSelectedId = null) {
 // LIVE Track Swapping: replaces video track in active RTP sender without disconnecting
 async function swapSourceLive(newSource) {
   try {
-    const isWindowSource = !newSource.isScreen || String(newSource.id).startsWith('window:');
-    selectedSourceId = newSource.id;
-    renderSourcesList(newSource.id);
+    const isPortalReselect = newSource.id === 'wayland-portal:reselect';
+    const effectiveSourceId = isPortalReselect ? 'wayland-portal:0' : newSource.id;
+    const isWindowSource = !newSource.isScreen || String(effectiveSourceId).startsWith('window:');
+    selectedSourceId = effectiveSourceId;
+    renderSourcesList(effectiveSourceId);
     playSourceSwitchAnimation(newSource.name, isWindowSource, true);
 
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -1196,7 +1244,7 @@ async function swapSourceLive(newSource) {
         JSON.stringify({
           type: 'source-switch',
           sourceName: newSource.name,
-          sourceKind: newSource.id.startsWith('window:') ? 'window' : 'screen'
+          sourceKind: effectiveSourceId.startsWith('window:') ? 'window' : 'screen'
         })
       );
     }
@@ -1205,10 +1253,14 @@ async function swapSourceLive(newSource) {
     await api.selectSource(newSource.id, false);
 
     const preset = getSelectedPreset();
-    const newStream = await acquireDesktopVideoStream(newSource.id, preset.width, preset.height, preset.fps, false);
+    const newStream = await acquireDesktopVideoStream(effectiveSourceId, preset.width, preset.height, preset.fps, false, false);
 
     const newVideoTrack = newStream.getVideoTracks()[0];
     if (!newVideoTrack) throw new Error('Não foi possível capturar o vídeo da nova fonte.');
+
+    if (systemCapabilities && systemCapabilities.isWayland && api.markWaylandSessionGranted) {
+      api.markWaylandSessionGranted({ label: newVideoTrack.label || newSource.name }).catch(() => {});
+    }
 
     await applyVideoTrackConstraints(newVideoTrack, preset.width, preset.height, preset.fps);
 
@@ -1473,24 +1525,61 @@ async function syncLiveAudioPipelineState(enabled) {
         await audioCtx.resume();
       } catch (_) {}
     }
-    if (api.startProcessAudio && !isProcessAudioRunning) {
+    if (!usingDisplayMediaAudioLoopback && api.startProcessAudio && !isProcessAudioRunning) {
       try {
-        await api.startProcessAudio();
-        isProcessAudioRunning = true;
+        const started = await api.startProcessAudio();
+        isProcessAudioRunning = Boolean(started);
       } catch (err) {
         console.warn('CastViewer: Falha ao ativar captura de áudio em execução:', err);
       }
     }
-    if (pcmWorkletNode && analyserNode) {
+    if ((pcmWorkletNode || usingDisplayMediaAudioLoopback) && analyserNode) {
       startVuMeterAnimation();
     }
   } else {
-    if (api.stopProcessAudio && isProcessAudioRunning) {
+    if (!usingDisplayMediaAudioLoopback && api.stopProcessAudio && isProcessAudioRunning) {
       isProcessAudioRunning = false;
       api.stopProcessAudio().catch((e) => console.warn(e));
     }
     stopVuMeter();
   }
+}
+
+// macOS / ScreenCaptureKit system audio track wiring (when native loopback-capture addon isn't bundled)
+async function setupDisplayMediaLoopbackAudio(stream) {
+  const audioTracks = stream && stream.getAudioTracks ? stream.getAudioTracks() : [];
+  if (audioTracks.length === 0) return null;
+
+  const track = audioTracks[0];
+  usingDisplayMediaAudioLoopback = true;
+  liveAudioTrack = track;
+  liveAudioTrack.enabled = audioCaptureEnabled;
+
+  try {
+    if (!audioCtx || audioCtx.state === 'closed') {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+        sampleRate: 48000,
+        latencyHint: 'interactive'
+      });
+      analyserNode = null;
+    }
+    if (audioCtx.state === 'suspended') {
+      await audioCtx.resume();
+    }
+    if (!analyserNode) {
+      analyserNode = audioCtx.createAnalyser();
+      analyserNode.fftSize = 256;
+      analyserNode.smoothingTimeConstant = 0.7;
+    }
+    const sourceNode = audioCtx.createMediaStreamSource(new MediaStream([track]));
+    sourceNode.connect(analyserNode);
+    isProcessAudioRunning = true;
+    startVuMeterAnimation();
+  } catch (err) {
+    console.warn('CastViewer: Aviso ao iniciar VU Meter do loopback macOS:', err && err.message);
+  }
+
+  return liveAudioTrack;
 }
 
 // Native Loopback Audio using loopback-capture & AudioWorklet
@@ -1567,6 +1656,7 @@ async function setupNativeLoopbackAudio() {
 function cleanupNativeLoopbackAudio() {
   const api = getApi();
   isProcessAudioRunning = false;
+  usingDisplayMediaAudioLoopback = false;
   if (pcmChunkUnsub) {
     pcmChunkUnsub();
     pcmChunkUnsub = null;
@@ -2806,20 +2896,50 @@ async function applyVideoTrackConstraints(videoTrack, width, height, targetFps) 
   }
 }
 
-async function acquireDesktopVideoStream(sourceId, width, height, targetFps, fallbackUnconstrained = false) {
+async function acquireDesktopVideoStream(
+  sourceId,
+  width,
+  height,
+  targetFps,
+  fallbackUnconstrained = false,
+  requestDisplayAudio = false
+) {
   const maxFps = getCaptureMaxFps(targetFps);
   const idealFps = targetFps >= 60 ? maxFps : targetFps;
+  const audioConstraint = requestDisplayAudio
+    ? {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      }
+    : false;
   const displayConstraints = {
     video: {
       width: { ideal: width, max: width },
       height: { ideal: height, max: height },
       frameRate: { ideal: idealFps, max: maxFps }
     },
-    audio: false // System audio is captured cleanly via loopback-capture + pcm-worklet!
+    audio: audioConstraint
   };
 
-  if (sourceId === 'wayland-portal:0') {
+  if (sourceId === 'wayland-portal:0' || sourceId === 'wayland-portal:reselect') {
     return await navigator.mediaDevices.getDisplayMedia(displayConstraints);
+  }
+
+  // On macOS without native loopback-capture addon, prefer getDisplayMedia so
+  // Electron's setDisplayMediaRequestHandler provides ScreenCaptureKit / CoreAudio system loopback.
+  if (requestDisplayAudio) {
+    try {
+      return await navigator.mediaDevices.getDisplayMedia(displayConstraints);
+    } catch (macAudioErr) {
+      console.warn('CastViewer: Captura com áudio do sistema macOS indisponível, fallback para vídeo:', macAudioErr);
+      try {
+        return await navigator.mediaDevices.getDisplayMedia({
+          video: displayConstraints.video,
+          audio: false
+        });
+      } catch (_fallbackErr) {}
+    }
   }
 
   try {
@@ -2957,15 +3077,27 @@ async function startTransmission(forceTakeover = false) {
   );
 
   try {
-    // Step 1: Pre-select source in main process
-    await api.selectSource(source.id, false);
+    // Step 1: Pre-select source in main process (enables macOS ScreenCaptureKit audio loopback when needed)
+    const wantDisplayAudioLoopback = Boolean(systemCapabilities.isMac && !systemCapabilities.hasNativeLoopback);
+    await api.selectSource(source.id, wantDisplayAudioLoopback);
 
-    // Step 2: Acquire Video Stream forcing DXGI Desktop Capture above 60Hz Nyquist beat-drop ceiling
-    localStream = await acquireDesktopVideoStream(source.id, targetWidth, targetHeight, targetFps, true);
+    // Step 2: Acquire Video Stream forcing DXGI / PipeWire / ScreenCaptureKit capture
+    localStream = await acquireDesktopVideoStream(
+      source.id,
+      targetWidth,
+      targetHeight,
+      targetFps,
+      true,
+      wantDisplayAudioLoopback
+    );
 
     // Immediately enforce resolution and frameRate constraints atomically on the acquired videoTrack
     const videoTrack = localStream.getVideoTracks()[0];
     if (videoTrack) {
+      if (systemCapabilities.isWayland && api.markWaylandSessionGranted) {
+        api.markWaylandSessionGranted({ label: videoTrack.label || source.name }).catch(() => {});
+      }
+
       await applyVideoTrackConstraints(videoTrack, targetWidth, targetHeight, targetFps);
 
       // NEVER use 'detail' (caps Chromium WebRTC at 30 FPS); use 'motion' for Fluidez 60 FPS and '' for Ultra Nitidez
@@ -2977,11 +3109,14 @@ async function startTransmission(forceTakeover = false) {
       };
     }
 
-    // Step 3: Always prepare WebAudio/MediaStream audio track so toggling mute/unmute
-    // mid-stream feeds live audio immediately into both WebRTC and Replay 30s clips.
-    const aTrack = await setupNativeLoopbackAudio();
-    if (aTrack && localStream) {
-      localStream.addTrack(aTrack);
+    // Step 3: Wire macOS ScreenCaptureKit audio track if returned, otherwise start native loopback-capture + AudioWorklet
+    if (wantDisplayAudioLoopback && localStream.getAudioTracks().length > 0) {
+      await setupDisplayMediaLoopbackAudio(localStream);
+    } else {
+      const aTrack = await setupNativeLoopbackAudio();
+      if (aTrack && localStream) {
+        localStream.addTrack(aTrack);
+      }
     }
 
     // Apply notebook mute state if user chose to mute notebook speakers

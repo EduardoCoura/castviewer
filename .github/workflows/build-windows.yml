@@ -1,0 +1,72 @@
+name: Build & Release CastViewer Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to attach Windows installers to'
+        required: true
+        default: 'v1.1.0'
+      upload_to_release:
+        description: 'Upload generated Windows installers to GitHub Release'
+        required: true
+        type: boolean
+        default: true
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: desktop-sender/package-lock.json
+
+      - name: Install desktop-sender dependencies
+        working-directory: desktop-sender
+        run: npm ci
+
+      - name: Run syntax checks & unit tests on Windows
+        working-directory: desktop-sender
+        run: npm run check
+
+      - name: Build Windows packages (NSIS Setup & Portable)
+        working-directory: desktop-sender
+        run: npx electron-builder --win nsis portable --publish never
+
+      - name: List generated Windows packages
+        working-directory: desktop-sender
+        shell: pwsh
+        run: Get-ChildItem dist\*.exe | Select-Object Name, Length
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: castviewer-windows-packages
+          path: desktop-sender/dist/*.exe
+
+      - name: Upload Windows installers to GitHub Release
+        if: |
+          (github.event_name == 'workflow_dispatch' && inputs.upload_to_release == true) ||
+          startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        shell: bash
+        run: |
+          if ! gh release view "$TARGET_TAG" >/dev/null 2>&1; then
+            gh release create "$TARGET_TAG" --title "CastViewer $TARGET_TAG" --generate-notes || true
+          fi
+          gh release upload "$TARGET_TAG" desktop-sender/dist/*.exe --clobber

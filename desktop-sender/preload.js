@@ -84,8 +84,13 @@ const api = {
   closeWindow: () => ipcRenderer.invoke('window-close'),
 
   // System info
+  platform: process.platform,
   getHostname: () => ipcRenderer.invoke('get-hostname'),
-  getVersion: () => '1.0.0'
+  getSystemCapabilities: () => ipcRenderer.invoke('get-system-capabilities'),
+  getWaylandSessionState: () => ipcRenderer.invoke('get-wayland-session-state'),
+  markWaylandSessionGranted: (payload) => ipcRenderer.invoke('mark-wayland-session-granted', payload),
+  clearWaylandSession: () => ipcRenderer.invoke('clear-wayland-session'),
+  getVersion: () => '1.1.0'
 };
 
 contextBridge.exposeInMainWorld('castviewer', api);

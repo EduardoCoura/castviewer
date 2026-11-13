@@ -1,0 +1,90 @@
+name: Build & Release CastViewer Android & Fire TV APKs
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to attach Android & Fire TV APKs to'
+        required: true
+        default: 'v1.1.0'
+      upload_to_release:
+        description: 'Upload generated APKs to GitHub Release'
+        required: true
+        type: boolean
+        default: true
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK & NDK 27
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0 ndk;27.0.12077973 cmake;3.22.1'
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+
+      - name: Make Gradle wrappers executable
+        run: |
+          chmod +x firestick-app/gradlew android-sender/gradlew
+
+      - name: Test & build Fire TV Receiver APK (v2.5 + AirPlay)
+        working-directory: firestick-app
+        run: |
+          ./gradlew testDebugUnitTest assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk ../CastViewer-FireTV-v2.5.apk
+
+      - name: Build Android Sender APK (v1.7.4)
+        working-directory: android-sender
+        run: |
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk ../CastViewer-Android-v1.7.4.apk
+
+      - name: Verify APK outputs
+        run: ls -lh CastViewer-FireTV-v2.5.apk CastViewer-Android-v1.7.4.apk
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: castviewer-apks
+          path: |
+            CastViewer-FireTV-v2.5.apk
+            CastViewer-Android-v1.7.4.apk
+
+      - name: Upload APKs to GitHub Release
+        if: |
+          (github.event_name == 'workflow_dispatch' && inputs.upload_to_release == true) ||
+          startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: |
+          if ! gh release view "$TARGET_TAG" >/dev/null 2>&1; then
+            gh release create "$TARGET_TAG" --title "CastViewer $TARGET_TAG" --generate-notes || true
+          fi
+          gh release upload "$TARGET_TAG" \
+            CastViewer-FireTV-v2.5.apk \
+            CastViewer-Android-v1.7.4.apk \
+            --clobber

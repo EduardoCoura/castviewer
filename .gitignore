@@ -9,6 +9,8 @@ yarn-debug.log*
 # Android & Fire TV Gradle
 .gradle/
 **/build/
+!desktop-sender/build/
+!desktop-sender/build/**
 local.properties
 captures/
 *.iml
@@ -27,6 +29,7 @@ release-apks/
 *.apk
 *.aab
 *.exe
+*.dmg
 *.AppImage
 *.deb
 *.blockmap

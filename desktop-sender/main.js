@@ -4,7 +4,20 @@
  * Studio-Grade Low-Latency Desktop Sender for Fire TV
  */
 
-const { app, BrowserWindow, ipcMain, desktopCapturer, session, Tray, Menu, nativeImage, shell, Notification, powerSaveBlocker } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  desktopCapturer,
+  session,
+  Tray,
+  Menu,
+  nativeImage,
+  shell,
+  Notification,
+  powerSaveBlocker,
+  systemPreferences
+} = require('electron');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -18,9 +31,22 @@ try {
   console.warn('CastViewer: Addon loopback-capture nativo indisponível:', err && err.message);
 }
 const { detectAndRecommendProfile, buildChromiumSwitches } = require('./hardware-profile');
+const {
+  WAYLAND_PORTAL_SOURCE_ID,
+  WAYLAND_RESELECT_SOURCE_ID,
+  isValidRestoreToken,
+  loadWaylandSessionState,
+  saveWaylandSessionState,
+  clearWaylandSessionState,
+  buildWaylandCapturerOptions,
+  extractWaylandRestoreMetadata,
+  buildWaylandPortalCards,
+  toBaseCapturerOptions
+} = require('./wayland-session');
 const { remuxReplayBufferToStandardMp4 } = require('./mp4-defragment');
 
 const IS_WIN = process.platform === 'win32';
+const IS_MAC = process.platform === 'darwin';
 const IS_LINUX = process.platform === 'linux';
 const IS_WAYLAND_SESSION =
   IS_LINUX &&
@@ -227,10 +253,77 @@ let bonjour = null;
 let bonjourBrowser = null;
 const discoveredDevices = new Map();
 
-// Active source selection & Wayland portal state for setDisplayMediaRequestHandler
+// Active source selection & Wayland portal persistence state for setDisplayMediaRequestHandler
 let activeSourceId = null;
 let waylandPortalRequired = false;
 let displayMediaUsePicker = false;
+let requestDisplayAudioLoopback = false;
+let waylandSessionState = null;
+const cachedDesktopSourcesById = new Map();
+
+function getWaylandSessionPath() {
+  return path.join(app.getPath('userData'), 'wayland-session.json');
+}
+
+function getWaylandSessionState() {
+  if (!waylandSessionState) {
+    waylandSessionState = loadWaylandSessionState(getWaylandSessionPath());
+  }
+  return waylandSessionState;
+}
+
+function persistWaylandSessionPatch(patch) {
+  const current = getWaylandSessionState();
+  waylandSessionState = saveWaylandSessionState(getWaylandSessionPath(), {
+    ...current,
+    ...patch
+  });
+  return waylandSessionState;
+}
+
+function clearPersistedWaylandSession() {
+  cachedDesktopSourcesById.clear();
+  waylandSessionState = clearWaylandSessionState(getWaylandSessionPath());
+  return waylandSessionState;
+}
+
+async function fetchDesktopCapturerSourcesSafe(useLowRam = false) {
+  const sessionState = getWaylandSessionState();
+  const options = buildWaylandCapturerOptions({
+    lowRam: useLowRam,
+    isWayland: IS_WAYLAND_SESSION,
+    restoreToken: sessionState.restoreToken,
+    persistent: true
+  });
+
+  let sources;
+  try {
+    sources = await desktopCapturer.getSources(options);
+  } catch (err) {
+    if (IS_WAYLAND_SESSION) {
+      sources = await desktopCapturer.getSources(toBaseCapturerOptions(options));
+    } else {
+      throw err;
+    }
+  }
+
+  const list = Array.isArray(sources) ? sources : [];
+  cachedDesktopSourcesById.clear();
+  for (const s of list) {
+    if (s && s.id) {
+      cachedDesktopSourcesById.set(s.id, s);
+    }
+  }
+
+  if (IS_WAYLAND_SESSION && list.length > 0) {
+    const extracted = extractWaylandRestoreMetadata(list, sessionState, activeSourceId);
+    if (extracted.changed) {
+      waylandSessionState = saveWaylandSessionState(getWaylandSessionPath(), extracted.state);
+    }
+  }
+
+  return list;
+}
 
 // Native loopback capture instance, Linux parec fallback & speaker mute tracking
 let loopbackCaptureInstance = null;
@@ -269,6 +362,14 @@ function getSpeakerMuteScriptPath() {
 }
 
 async function getSpeakerMute() {
+  if (IS_MAC) {
+    const res = await runCommandText('osascript', ['-e', 'output muted of (get volume settings)'], 2500);
+    if (res.ok) {
+      return /\btrue\b/i.test(res.stdout);
+    }
+    return false;
+  }
+
   if (IS_LINUX) {
     const pactlRes = await runCommandText('pactl', ['get-sink-mute', '@DEFAULT_SINK@'], 2500);
     if (pactlRes.ok) {
@@ -299,6 +400,18 @@ async function getSpeakerMute() {
 
 async function setSpeakerMute(muted) {
   const wantMuted = Boolean(muted);
+  if (IS_MAC) {
+    const res = await runCommandText(
+      'osascript',
+      ['-e', `set volume output muted ${wantMuted ? 'true' : 'false'}`],
+      2500
+    );
+    if (res.ok) {
+      isSpeakerMutedByUs = wantMuted;
+    }
+    return res.ok;
+  }
+
   if (IS_LINUX) {
     const val = wantMuted ? '1' : '0';
     let ok = (await runCommandText('pactl', ['set-sink-mute', '@DEFAULT_SINK@', val], 2500)).ok;
@@ -346,6 +459,12 @@ function restoreSpeakerMuteSync() {
       console.log('CastViewer: Alto-falantes restaurados sincronicamente.');
       return;
     }
+    if (IS_MAC) {
+      execFileSync('osascript', ['-e', 'set volume output muted false'], { timeout: 2000 });
+      isSpeakerMutedByUs = false;
+      console.log('CastViewer: Alto-falantes macOS restaurados sincronicamente.');
+      return;
+    }
     if (IS_LINUX) {
       const env = { ...process.env, LC_ALL: 'C', LANG: 'C' };
       try {
@@ -362,6 +481,17 @@ function restoreSpeakerMuteSync() {
 }
 
 async function triggerMediaPlayPause() {
+  if (IS_MAC) {
+    if ((await runCommandText('nowplaying-cli', ['togglePlayPause'], 2000)).ok) return true;
+    const script =
+      'if application "Spotify" is running then\n' +
+      '  tell application "Spotify" to playpause\n' +
+      'else if application "Music" is running then\n' +
+      '  tell application "Music" to playpause\n' +
+      'end if';
+    return (await runCommandText('osascript', ['-e', script], 2000)).ok;
+  }
+
   if (IS_LINUX) {
     if ((await runCommandText('playerctl', ['play-pause'], 2000)).ok) return true;
     return (await runCommandText('xdotool', ['key', 'XF86AudioPlay'], 2000)).ok;
@@ -380,10 +510,55 @@ async function triggerMediaPlayPause() {
   });
 }
 
+function setupApplicationMenu() {
+  if (!IS_MAC) {
+    Menu.setApplicationMenu(null);
+    return;
+  }
+
+  const macTemplate = [
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about', label: 'Sobre o CastViewer' },
+        { type: 'separator' },
+        { role: 'hide', label: 'Ocultar CastViewer' },
+        { role: 'hideOthers', label: 'Ocultar Outros' },
+        { role: 'unhide', label: 'Mostrar Todos' },
+        { type: 'separator' },
+        { role: 'quit', label: 'Encerrar CastViewer' }
+      ]
+    },
+    {
+      label: 'Editar',
+      submenu: [
+        { role: 'undo', label: 'Desfazer' },
+        { role: 'redo', label: 'Refazer' },
+        { type: 'separator' },
+        { role: 'cut', label: 'Recortar' },
+        { role: 'copy', label: 'Copiar' },
+        { role: 'paste', label: 'Colar' },
+        { role: 'selectAll', label: 'Selecionar Tudo' }
+      ]
+    },
+    {
+      label: 'Janela',
+      submenu: [
+        { role: 'minimize', label: 'Minimizar' },
+        { role: 'close', label: 'Fechar' },
+        { type: 'separator' },
+        { role: 'front', label: 'Trazer Todas para Frente' }
+      ]
+    }
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(macTemplate));
+}
+
 // Create main application window
 function createWindow() {
-  Menu.setApplicationMenu(null);
-  const iconPath = path.join(__dirname, 'assets', process.platform === 'win32' ? 'castviewer_v2.ico' : 'icon.png');
+  setupApplicationMenu();
+  const iconFile = IS_WIN ? 'castviewer_v2.ico' : IS_MAC ? 'icon.icns' : 'icon.png';
+  const iconPath = path.join(__dirname, 'assets', iconFile);
 
   mainWindow = new BrowserWindow({
     width: 720,
@@ -440,7 +615,10 @@ function createWindow() {
 function createTray() {
   try {
     const iconPath = path.join(__dirname, 'assets', IS_WIN ? 'castviewer_v2.ico' : 'icon.png');
-    const icon = nativeImage.createFromPath(iconPath);
+    let icon = nativeImage.createFromPath(iconPath);
+    if (IS_MAC && !icon.isEmpty()) {
+      icon = icon.resize({ width: 18, height: 18 });
+    }
     tray = new Tray(icon);
     tray.setToolTip('CastViewer - Espelhamento local ultra-rápido para Fire TV');
 
@@ -529,7 +707,7 @@ function updateTrayMenu() {
   tray.setContextMenu(contextMenu);
 }
 
-// Setup DisplayMedia Request Handler (custom source on Windows/X11 or system portal on Wayland)
+// Setup DisplayMedia Request Handler (custom source on Windows/X11/macOS or system portal on Wayland)
 function configureDisplayMediaHandler(useSystemPicker = false) {
   const nextPicker = Boolean(useSystemPicker);
   if (displayMediaUsePicker === nextPicker && session.defaultSession._cvDisplayMediaConfigured) {
@@ -541,24 +719,35 @@ function configureDisplayMediaHandler(useSystemPicker = false) {
   session.defaultSession.setDisplayMediaRequestHandler(
     async (_request, callback) => {
       try {
-        const sources = await desktopCapturer.getSources({
-          types: ['screen', 'window']
-        });
+        // On Wayland, reuse cached DesktopCapturerSource (preserving Chromium RestoreToken)
+        // instead of forcing a duplicate portal getSources() round-trip when possible.
+        let chosen =
+          activeSourceId &&
+          activeSourceId !== WAYLAND_PORTAL_SOURCE_ID &&
+          activeSourceId !== WAYLAND_RESELECT_SOURCE_ID
+            ? cachedDesktopSourcesById.get(activeSourceId) || null
+            : null;
 
-        let chosen = null;
-        if (activeSourceId && activeSourceId !== 'wayland-portal:0') {
-          chosen = sources.find((s) => s.id === activeSourceId);
-        }
-
-        // Fallback: gracefully pick first screen or window if activeSourceId wasn't found
-        if (!chosen && sources.length > 0) {
-          chosen = sources.find((s) => s.id.startsWith('screen:')) || sources[0];
+        if (!chosen) {
+          const sources = await fetchDesktopCapturerSourcesSafe(perfPrefs.lowRamMode);
+          if (
+            activeSourceId &&
+            activeSourceId !== WAYLAND_PORTAL_SOURCE_ID &&
+            activeSourceId !== WAYLAND_RESELECT_SOURCE_ID
+          ) {
+            chosen = sources.find((s) => s.id === activeSourceId) || null;
+          }
+          if (!chosen && sources.length > 0) {
+            chosen = sources.find((s) => s.id.startsWith('screen:')) || sources[0];
+          }
         }
 
         if (chosen) {
+          const audioOption =
+            IS_MAC && !LoopbackCapture && requestDisplayAudioLoopback ? 'loopback' : undefined;
           callback({
             video: chosen,
-            audio: undefined // Audio captured natively via loopback-capture + AudioWorklet!
+            audio: audioOption
           });
         } else {
           callback({});
@@ -772,17 +961,12 @@ async function startLinuxParecFallback() {
 }
 
 function getWaylandPortalSources() {
-  return [
-    {
-      id: 'wayland-portal:0',
-      name: 'Tela ou Janela (Seletor PipeWire / Wayland)',
-      thumbnail: '',
-      appIcon: null,
-      display_id: '0',
-      isScreen: true,
-      isPortalPicker: true
-    }
-  ];
+  const sessionState = getWaylandSessionState();
+  return buildWaylandPortalCards({
+    hasRestoreToken: isValidRestoreToken(sessionState.restoreToken),
+    hasActiveSession: Boolean(sessionState.grantedAt),
+    lastSourceLabel: sessionState.lastSourceLabel
+  });
 }
 
 // IPC Handlers
@@ -795,11 +979,7 @@ function setupIpc() {
 
     try {
       const useLowRam = Boolean((options && options.lowRam) || perfPrefs.lowRamMode);
-      const sources = await desktopCapturer.getSources({
-        types: ['screen', 'window'],
-        thumbnailSize: useLowRam ? { width: 160, height: 90 } : { width: 240, height: 135 },
-        fetchWindowIcons: true
-      });
+      const sources = await fetchDesktopCapturerSourcesSafe(useLowRam);
 
       const jpegQuality = useLowRam ? 55 : 75;
       const mapped = sources
@@ -812,7 +992,8 @@ function setupIpc() {
             : '',
           appIcon: s.appIcon && !s.appIcon.isEmpty() ? s.appIcon.toDataURL() : null,
           display_id: s.display_id,
-          isScreen: s.id.startsWith('screen:')
+          isScreen: s.id.startsWith('screen:'),
+          hasRestoreToken: isValidRestoreToken(s.restoreToken || s.restore_token)
         }));
 
       if (mapped.length === 0 && IS_LINUX && IS_WAYLAND_SESSION) {
@@ -820,8 +1001,22 @@ function setupIpc() {
         return getWaylandPortalSources();
       }
 
-      // Sort screens first, then open windows preserving native z-order
-      return mapped.sort((a, b) => Number(b.isScreen) - Number(a.isScreen));
+      const sorted = mapped.sort((a, b) => Number(b.isScreen) - Number(a.isScreen));
+      if (IS_LINUX && IS_WAYLAND_SESSION && sorted.length > 0) {
+        waylandPortalRequired = false;
+        sorted.push({
+          id: WAYLAND_RESELECT_SOURCE_ID,
+          name: 'Trocar Tela/Janela (Abrir Portal Wayland)',
+          thumbnail: '',
+          appIcon: null,
+          display_id: 'reselect',
+          isScreen: true,
+          isPortalPicker: true,
+          isPortalReset: true
+        });
+      }
+
+      return sorted;
     } catch (err) {
       console.error('CastViewer: Falha ao obter fontes desktopCapturer:', err);
       if (IS_LINUX && IS_WAYLAND_SESSION) {
@@ -832,14 +1027,83 @@ function setupIpc() {
     }
   });
 
-  // Select source before calling getDisplayMedia
+  // Select source before calling getDisplayMedia / getUserMedia
   ipcMain.handle('select-source', (_event, payload) => {
     const sourceId = payload && typeof payload.sourceId === 'string' ? payload.sourceId : null;
     if (!sourceId || sourceId.length > 128) {
       return false;
     }
+
+    requestDisplayAudioLoopback = Boolean(payload && payload.audio && IS_MAC && !LoopbackCapture);
+
+    if (IS_LINUX && IS_WAYLAND_SESSION && sourceId === WAYLAND_RESELECT_SOURCE_ID) {
+      clearPersistedWaylandSession();
+      waylandPortalRequired = true;
+      activeSourceId = WAYLAND_PORTAL_SOURCE_ID;
+      configureDisplayMediaHandler(true);
+      return true;
+    }
+
     activeSourceId = sourceId;
-    configureDisplayMediaHandler(IS_LINUX && IS_WAYLAND_SESSION && sourceId === 'wayland-portal:0');
+    configureDisplayMediaHandler(IS_LINUX && IS_WAYLAND_SESSION && sourceId === WAYLAND_PORTAL_SOURCE_ID);
+    return true;
+  });
+
+  // Platform & Wayland Session Persistence State
+  ipcMain.handle('get-system-capabilities', () => {
+    let screenPermission = 'granted';
+    if (IS_MAC && systemPreferences && typeof systemPreferences.getMediaAccessStatus === 'function') {
+      try {
+        screenPermission = systemPreferences.getMediaAccessStatus('screen') || 'unknown';
+      } catch (_) {
+        screenPermission = 'unknown';
+      }
+    }
+    return {
+      platform: process.platform,
+      arch: process.arch,
+      isWin: IS_WIN,
+      isMac: IS_MAC,
+      isLinux: IS_LINUX,
+      isWayland: IS_WAYLAND_SESSION,
+      hasNativeLoopback: Boolean(LoopbackCapture),
+      screenPermission
+    };
+  });
+
+  ipcMain.handle('get-wayland-session-state', () => {
+    const state = getWaylandSessionState();
+    return {
+      isWayland: IS_WAYLAND_SESSION,
+      persistMode: state.persistMode,
+      hasRestoreToken: isValidRestoreToken(state.restoreToken),
+      hasActiveSession: Boolean(state.grantedAt || isValidRestoreToken(state.restoreToken)),
+      lastSourceLabel: state.lastSourceLabel,
+      grantedAt: state.grantedAt
+    };
+  });
+
+  ipcMain.handle('mark-wayland-session-granted', (_event, payload) => {
+    if (!IS_LINUX || !IS_WAYLAND_SESSION) return false;
+    const label =
+      payload && typeof payload.label === 'string' && payload.label.trim()
+        ? payload.label.trim().slice(0, 120)
+        : null;
+    const token = payload && isValidRestoreToken(payload.restoreToken) ? payload.restoreToken.trim() : null;
+    persistWaylandSessionPatch({
+      ...(token ? { restoreToken: token } : {}),
+      ...(label ? { lastSourceLabel: label } : {}),
+      sourceId: activeSourceId || WAYLAND_PORTAL_SOURCE_ID,
+      grantedAt: Date.now()
+    });
+    return true;
+  });
+
+  ipcMain.handle('clear-wayland-session', () => {
+    clearPersistedWaylandSession();
+    if (IS_LINUX && IS_WAYLAND_SESSION) {
+      waylandPortalRequired = true;
+    }
     return true;
   });
 
@@ -1091,7 +1355,7 @@ function setupIpc() {
 
   // Hostname
   ipcMain.handle('get-hostname', () => {
-    return os.hostname() || (IS_LINUX ? 'Desktop Linux' : 'Desktop Windows');
+    return os.hostname() || (IS_MAC ? 'Mac' : IS_LINUX ? 'Desktop Linux' : 'Desktop Windows');
   });
 
   // Desktop Captures: Save Screenshot PNG (Pictures/CastViewer)

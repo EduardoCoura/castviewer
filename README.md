@@ -12,8 +12,10 @@
 
 [![Release](https://img.shields.io/github/v/release/EduardoCoura/castviewer?label=Release&color=FF5A1F&style=for-the-badge)](https://github.com/EduardoCoura/castviewer/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)](./LICENSE)
+[![macOS Build](https://img.shields.io/github/actions/workflow/status/EduardoCoura/castviewer/build-macos.yml?branch=main&label=macOS%20.dmg&style=for-the-badge)](https://github.com/EduardoCoura/castviewer/actions/workflows/build-macos.yml)
 [![Linux Build](https://img.shields.io/github/actions/workflow/status/EduardoCoura/castviewer/build-linux.yml?branch=main&label=Linux%20Build&style=for-the-badge)](https://github.com/EduardoCoura/castviewer/actions/workflows/build-linux.yml)
-[![Plataformas](https://img.shields.io/badge/Plataformas-Windows%20%7C%20Linux%20%7C%20Android%20%7C%20iOS%20(AirPlay)%20%7C%20Fire%20TV-18181D?style=for-the-badge)](#downloads)
+[![Windows Build](https://img.shields.io/github/actions/workflow/status/EduardoCoura/castviewer/build-windows.yml?branch=main&label=Windows%20Build&style=for-the-badge)](https://github.com/EduardoCoura/castviewer/actions/workflows/build-windows.yml)
+[![Plataformas](https://img.shields.io/badge/Plataformas-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS%20(AirPlay)%20%7C%20Fire%20TV-18181D?style=for-the-badge)](#downloads)
 
 <br/>
 
@@ -21,7 +23,7 @@
 [Por que usar?](#-por-que-o-castviewer) •
 [Recursos](#-recursos-por-plataforma) •
 [Arquitetura](#-arquitetura-zero-cloud) •
-[Roadmap](#%EF%B8%8F-roadmap--implementações-futuras) •
+[Roadmap](#%EF%B8%8F-roadmap--implementações-concluídas) •
 [Compilar](#%EF%B8%8F-como-compilar-do-código-fonte)
 
 </div>
@@ -30,11 +32,12 @@
 
 ## 🎯 Por que o CastViewer?
 
-Espelhar PC ou celular na Fire TV normalmente exige nuvem, cabos HDMI, drivers virtuais pesados (como VB-CABLE) ou sofre com segundos inteiros de atraso. O **CastViewer** resolve isso com uma arquitetura direta dentro do seu próprio Wi-Fi ou cabo de rede:
+Espelhar PC, Mac ou celular na Fire TV normalmente exige nuvem, cabos HDMI, drivers virtuais pesados (como VB-CABLE ou BlackHole) ou sofre com segundos inteiros de atraso. O **CastViewer** resolve isso com uma arquitetura direta dentro do seu próprio Wi-Fi ou cabo de rede:
 
-- **⚡ Latência ultrabaixa (~4 ms na LAN):** vídeo H.264 acelerado por hardware (`MediaCodec` DirectSurface no Fire TV) e áudio Opus direto via **WebRTC LAN P2P** (`iceServers: []`, zero STUN/TURN externo).
+- **⚡ Latência ultrabaixa (~4 ms na LAN):** vídeo H.264 acelerado por hardware (`MediaCodec` DirectSurface no Fire TV, MediaFoundation/VideoToolbox/VA-API no desktop) e áudio Opus direto via **WebRTC LAN P2P** (`iceServers: []`, zero STUN/TURN externo).
 - **🍎 Apple AirPlay nativo no receptor da TV:** conecte **iPhone, iPad e Mac** direto pela **Central de Controle → Espelhar Tela** sem instalar app na App Store — com suporte nativo a H.264 / H.265 (HEVC), áudio AAC-ELD / AAC-LC / ALAC / PCM e ajuste automático de retrato/paisagem na TV.
-- **🎧 Áudio interno nativo sem gambiarras:** captura direta do áudio do sistema no **Windows** (WASAPI loopback), **Linux** (PipeWire nativo + fallback `parec`/PulseAudio) e **Android** (`AudioPlaybackCapture`), com botão para silenciar os alto-falantes do notebook enquanto transmite.
+- **🎧 Áudio interno nativo sem gambiarras:** captura direta do áudio do sistema no **Windows** (WASAPI loopback), **macOS** (ScreenCaptureKit / CoreAudio Tap), **Linux** (PipeWire nativo + fallback `parec`/PulseAudio) e **Android** (`AudioPlaybackCapture`), com botão para silenciar os alto-falantes do computador enquanto transmite.
+- **🐧 Sessão Wayland Persistente (`RestoreToken`):** cache de token de sessão PipeWire/XDG ScreenCast (`persist_mode = 2`) sem polling em segundo plano para evitar reconfirmações repetidas no compositor ao alternar fontes ou presets.
 - **🔒 Privacidade e controle total:** descoberta automática na LAN via mDNS (`_firecast._tcp.`, `_airplay._tcp.` e `_raop._tcp.`) — nenhum byte sai da sua rede local.
 - **🎬 Recursos extras práticos:** troca instantânea entre **Tela** e **Janela** ao vivo sem desconectar, **Clip Replay 30s (MP4)**, **Print instantâneo**, **Pausa com congelamento de quadro**, troca limpa entre **WebRTC e AirPlay** e **Takeover inteligente**.
 
@@ -42,14 +45,29 @@ Espelhar PC ou celular na Fire TV normalmente exige nuvem, cabos HDMI, drivers v
 
 ## 📦 Downloads
 
-Baixe o pacote pronto para cada dispositivo na [**Release v1.0.0**](https://github.com/EduardoCoura/castviewer/releases/tag/v1.0.0) _(nota: o receptor **Fire TV v2.5** com **Apple AirPlay** já está implementado nesta branch `main` e pode ser compilado abaixo enquanto uma nova release APK não for publicada)_:
+Baixe o instalador ou pacote pronto para cada dispositivo na [**Release v1.1.0**](https://github.com/EduardoCoura/castviewer/releases/tag/v1.1.0) _(ou veja todas as versões em [Releases](https://github.com/EduardoCoura/castviewer/releases))_:
 
 | Dispositivo | Versão | Pacote / Instalador | Download Direto |
 | :--- | :---: | :--- | :--- |
-| **Fire TV / Android TV** | `v2.4` (Release) / `v2.5` (`main`) | APK Receptor (obrigatório na TV) | [**`CastViewer-FireTV-v2.4.apk`**](https://github.com/EduardoCoura/castviewer/releases/download/v1.0.0/CastViewer-FireTV-v2.4.apk) |
-| **Windows (x64)** | `v1.0.0` | Instalador (`.exe`) • Portátil (`.exe`) | [**Setup `.exe`**](https://github.com/EduardoCoura/castviewer/releases/download/v1.0.0/CastViewer.Setup.1.0.0.exe) • [**Portátil `.exe`**](https://github.com/EduardoCoura/castviewer/releases/download/v1.0.0/CastViewer-Portable-1.0.0.exe) |
-| **Linux (x64)** | `v1.0.0` | Universal (`AppImage`) • Debian/Ubuntu (`.deb`) • `.tar.gz` | [**`.AppImage`**](https://github.com/EduardoCoura/castviewer/releases/download/v1.0.0/CastViewer-Linux-1.0.0-x86_64.AppImage) • [**`.deb`**](https://github.com/EduardoCoura/castviewer/releases/download/v1.0.0/CastViewer-Linux-1.0.0-amd64.deb) • [**`.tar.gz`**](https://github.com/EduardoCoura/castviewer/releases/download/v1.0.0/CastViewer-Linux-1.0.0-x64.tar.gz) |
-| **Android (Mobile)** | `v1.7.4` | APK Emissor (`Android 8.0+`) | [**`CastViewer-Android-v1.7.4.apk`**](https://github.com/EduardoCoura/castviewer/releases/download/v1.0.0/CastViewer-Android-v1.7.4.apk) |
+| **Fire TV / Android TV** | `v2.5` | APK Receptor com AirPlay 2/RAOP (obrigatório na TV) | [**`CastViewer-FireTV-v2.5.apk`**](https://github.com/EduardoCoura/castviewer/releases/download/v1.1.0/CastViewer-FireTV-v2.5.apk) |
+| **Windows (x64)** | `v1.1.0` | Instalador (`.exe`) • Portátil (`.exe`) | [**Setup `.exe`**](https://github.com/EduardoCoura/castviewer/releases/download/v1.1.0/CastViewer.Setup.1.1.0.exe) • [**Portátil `.exe`**](https://github.com/EduardoCoura/castviewer/releases/download/v1.1.0/CastViewer-Portable-1.1.0.exe) |
+| **macOS (Apple Silicon + Intel)** | `v1.1.0` | Universal `.dmg` (`arm64` / `x64`) | [**`CastViewer-macOS-1.1.0-universal.dmg`**](https://github.com/EduardoCoura/castviewer/releases/download/v1.1.0/CastViewer-macOS-1.1.0-universal.dmg) |
+| **Linux (x64)** | `v1.1.0` | Universal (`AppImage`) • Debian/Ubuntu (`.deb`) • `.tar.gz` | [**`.AppImage`**](https://github.com/EduardoCoura/castviewer/releases/download/v1.1.0/CastViewer-Linux-1.1.0-x86_64.AppImage) • [**`.deb`**](https://github.com/EduardoCoura/castviewer/releases/download/v1.1.0/CastViewer-Linux-1.1.0-amd64.deb) • [**`.tar.gz`**](https://github.com/EduardoCoura/castviewer/releases/download/v1.1.0/CastViewer-Linux-1.1.0-x64.tar.gz) |
+| **Android (Mobile)** | `v1.7.4` | APK Emissor (`Android 8.0+`) | [**`CastViewer-Android-v1.7.4.apk`**](https://github.com/EduardoCoura/castviewer/releases/download/v1.1.0/CastViewer-Android-v1.7.4.apk) |
+
+<details>
+<summary><b>🍏 Guia rápido de instalação no macOS (.dmg Universal — Apple Silicon & Intel)</b></summary>
+
+<br/>
+
+1. Baixe `CastViewer-macOS-1.1.0-universal.dmg`, abra a imagem e arraste **CastViewer.app** para **Aplicativos (Applications)**.
+2. **Primeira abertura (build open-source sem assinatura paga da Apple):** caso o Gatekeeper exiba aviso de desenvolvedor não identificado, clique com o botão direito em **CastViewer → Abrir** (ou execute no Terminal):
+```bash
+xattr -cr /Applications/CastViewer.app
+```
+3. **Permissões recomendadas:** em **Ajustes do Sistema → Privacidade e Segurança**, autorize **Gravação de Tela** e **Captura de Áudio do Sistema** (macOS 14.2+) para espelhar vídeo e áudio interno via ScreenCaptureKit/CoreAudio Tap sem driver virtual. _(Opcionalmente, Macs também podem espelhar nativamente pela Central de Controle usando o receptor AirPlay do Fire TV!)_
+
+</details>
 
 <details>
 <summary><b>🐧 Guia rápido de instalação no Linux (Ubuntu, Debian, Fedora, Arch, Mint...)</b></summary>
@@ -58,20 +76,20 @@ Baixe o pacote pronto para cada dispositivo na [**Release v1.0.0**](https://gith
 
 **Opção 1 — Debian / Ubuntu / Pop!_OS / Mint (`.deb`):**
 ```bash
-sudo apt install ./CastViewer-Linux-1.0.0-amd64.deb
+sudo apt install ./CastViewer-Linux-1.1.0-amd64.deb
 castviewer
 ```
 
 **Opção 2 — Qualquer distro (`AppImage`):**
 ```bash
-chmod +x CastViewer-Linux-1.0.0-x86_64.AppImage
-./CastViewer-Linux-1.0.0-x86_64.AppImage
+chmod +x CastViewer-Linux-1.1.0-x86_64.AppImage
+./CastViewer-Linux-1.1.0-x86_64.AppImage
 ```
-> **Dica para Ubuntu 24.04+:** caso o AppArmor restrinja o sandbox local em AppImages, execute com `./CastViewer-Linux-1.0.0-x86_64.AppImage --no-sandbox` ou utilize o pacote `.deb`.
+> **Dica para Ubuntu 24.04+:** caso o AppArmor restrinja o sandbox local em AppImages, execute com `./CastViewer-Linux-1.1.0-x86_64.AppImage --no-sandbox` ou utilize o pacote `.deb`.
 
 **Notas de Sessão e Áudio:**
 - **X11:** prévia e troca direta de telas e janelas na grade da interface.
-- **Wayland:** usa o seletor nativo do sistema via Portal PipeWire (`WebRTCPipeWireCapturer`) ao iniciar a transmissão.
+- **Wayland (PipeWire + `RestoreToken`):** utiliza `WebRTCPipeWireCapturer` com **Wayland Session Persistence** (`persist_mode = 2` e cache local do token/fonte), evitando chamadas em segundo plano ao portal e preservando a seleção ao alternar presets ou fontes — além de card dedicado **"Trocar Tela/Janela (Abrir Portal Wayland)"** para reescolher quando desejar.
 - **Áudio do sistema:** captura nativa via PipeWire (`loopback-capture`) com fallback automático para `parec` (PulseAudio), além de silenciamento do PC via `pactl`/`wpctl` e Play/Pause remoto via `playerctl`.
 
 </details>
@@ -82,11 +100,12 @@ chmod +x CastViewer-Linux-1.0.0-x86_64.AppImage
 
 | Plataforma | Módulo | Status | Destaques |
 | :--- | :--- | :---: | :--- |
-| **Fire TV / Android TV** | [`firestick-app/`](./firestick-app) | ✅ **Ativo (`v2.5` em `main`)** | Receptor Kotlin + NDK/JNI com decodificação por hardware (`MediaCodec` H.264/HEVC), QR Code na tela, áudio HDMI (`AudioTrack`), **receptor Apple AirPlay 2/RAOP nativo** e troca automática entre sessões WebRTC e AirPlay. |
-| **Windows** | [`desktop-sender/`](./desktop-sender) | ✅ **Ativo (`v1.0.0`)** | Electron 45 com captura DXGI/WGC 1080p60+, áudio loopback WASAPI sem VB-CABLE, mute de alto-falantes, auto-detecção de GPU (NVIDIA/AMD/Intel/Hybrid), Modo PC Fraco/Pouca RAM, Clip Replay 30s MP4 e Play/Pause remoto. |
-| **Linux** | [`desktop-sender/`](./desktop-sender) | ✅ **Ativo (`v1.0.0`)** | Compatível com **X11 e Wayland/PipeWire**, loopback nativo PipeWire + fallback `parec`, mute via `pactl`/`wpctl`, Play/Pause MPRIS, pacotes `.AppImage`, `.deb` e `.tar.gz`. |
+| **Fire TV / Android TV** | [`firestick-app/`](./firestick-app) | ✅ **Ativo (`v2.5`)** | Receptor Kotlin + NDK/JNI com decodificação por hardware (`MediaCodec` H.264/HEVC), QR Code na tela, áudio HDMI (`AudioTrack`), **receptor Apple AirPlay 2/RAOP nativo** e troca automática entre sessões WebRTC e AirPlay. |
+| **Windows** | [`desktop-sender/`](./desktop-sender) | ✅ **Ativo (`v1.1.0`)** | Electron 45 com captura DXGI/WGC 1080p60+, áudio loopback WASAPI sem VB-CABLE, mute de alto-falantes, auto-detecção de GPU (NVIDIA/AMD/Intel/Hybrid), Modo PC Fraco/Pouca RAM, Clip Replay 30s MP4 e Play/Pause remoto. |
+| **macOS** | [`desktop-sender/`](./desktop-sender) | ✅ **Ativo (`v1.1.0`)** | Binário **Universal `.dmg` (`arm64` + `x64`)**, hardware VideoToolbox, **áudio do sistema nativo** via ScreenCaptureKit/CoreAudio Tap (`NSAudioCaptureUsageDescription`), mute de áudio/Play-Pause nativos via `osascript` e barra/atalhos macOS completos. |
+| **Linux** | [`desktop-sender/`](./desktop-sender) | ✅ **Ativo (`v1.1.0`)** | Compatível com **X11 e Wayland/PipeWire com Session Persistence (`RestoreToken`)**, loopback nativo PipeWire + fallback `parec`, mute via `pactl`/`wpctl`, Play/Pause MPRIS, pacotes `.AppImage`, `.deb` e `.tar.gz`. |
 | **Android** | [`android-sender/`](./android-sender) | ✅ **Ativo (`v1.7.4`)** | App Jetpack Compose / Material 3 com `MediaProjection` + áudio interno (`AudioPlaybackCapture`), bolha flutuante externa para pausar/encerrar/gravar sobre qualquer app, Modo AMOLED, Quick Tile e Replay 30s. |
-| **iOS / iPadOS (via AirPlay)** | [`firestick-app/`](./firestick-app) | ✅ **Ativo no Receptor TV (`v2.5` em `main`)** | Espelhamento de tela e áudio direto pela **Central de Controle → Espelhar Tela** no iPhone, iPad ou Mac na mesma rede local — sem instalar nenhum app na App Store (vídeos protegidos por DRM FairPlay em apps como Apple TV+/Netflix continuam bloqueados pelo iOS). |
+| **iOS / iPadOS (via AirPlay)** | [`firestick-app/`](./firestick-app) | ✅ **Ativo no Receptor TV (`v2.5`)** | Espelhamento de tela e áudio direto pela **Central de Controle → Espelhar Tela** no iPhone, iPad ou Mac na mesma rede local — sem instalar nenhum app na App Store (vídeos protegidos por DRM FairPlay em apps como Apple TV+/Netflix continuam bloqueados pelo iOS). |
 
 ---
 
@@ -95,7 +114,7 @@ chmod +x CastViewer-Linux-1.0.0-x86_64.AppImage
 ```mermaid
 flowchart LR
     subgraph Senders ["Emissores na Rede Local"]
-        PC["Windows & Linux<br/>(Electron 45 + WebRTC)"]
+        PC["Windows, macOS & Linux<br/>(Electron 45 + WebRTC)"]
         AND["Android<br/>(Jetpack Compose + MediaProjection)"]
         IOS["iOS / iPadOS / macOS<br/>(AirPlay Nativo)"]
     end
@@ -124,21 +143,23 @@ flowchart LR
 
 ---
 
-## 🗺️ Roadmap & Implementações Futuras
+## 🗺️ Roadmap & Implementações Concluídas
 
-> **Concluído recentemente (`v2.5` em `main`):** suporte a **iOS / iPadOS / macOS via Apple AirPlay** integrado diretamente ao receptor da TV ([`firestick-app/`](./firestick-app)), sem necessidade de aplicativo complementar na App Store.
+Todas as metas centrais multiplataforma do **CastViewer** foram implementadas na **`v1.1.0` / Fire TV `v2.5`**:
 
-- [x] **🍎 Suporte a iOS / iPadOS via AirPlay (`firestick-app` v2.5):**
-  - Receptor nativo em C/C++ (NDK/JNI sobre Android `MediaCodec` + `AudioTrack`) anunciando `_airplay._tcp.` e `_raop._tcp.` via `NsdManager`, com decodificação por hardware H.264/HEVC, áudio AAC-ELD / AAC-LC / ALAC / PCM e ajuste automático retrato/paisagem na TV. _(Observação técnica: conteúdos com DRM FairPlay da Apple em streamings fechados continuam restritos pelo sistema operacional da Apple.)_
-- [ ] **🐧 Wayland Session Persistence:** suporte a restauração automática de token de sessão ScreenCast no PipeWire (`RestoreToken`) para evitar reconfirmar a tela ao alternar fontes no Wayland.
-- [ ] **🍏 macOS Desktop Sender:** empacotamento `.dmg` universal (`arm64` / `x64`) para `desktop-sender/`.
+- [x] **🍎 Suporte a iOS / iPadOS / macOS via AirPlay (`firestick-app` v2.5):**
+  - Receptor nativo em C/C++ (NDK/JNI sobre Android `MediaCodec` + `AudioTrack`) anunciando `_airplay._tcp.` e `_raop._tcp.` via `NsdManager`, com decodificação por hardware H.264/HEVC, áudio AAC-ELD / AAC-LC / ALAC / PCM e ajuste automático retrato/paisagem na TV. _(Conteúdos protegidos com DRM FairPlay em apps de streaming continuam restritos pelo sistema da Apple.)_
+- [x] **🐧 Wayland Session Persistence (`desktop-sender` v1.1.0):**
+  - Persistência de `RestoreToken` e opções `persist_mode = 2` no PipeWire/ScreenCast (`wayland-session.js`), eliminação de polling automático no portal, card dedicado para reescolha intencional e preservação de fluxo sem reconfirmações desnecessárias ao alternar fontes ou presets.
+- [x] **🍏 macOS Desktop Sender (`desktop-sender` v1.1.0):**
+  - Suporte completo a Apple Silicon (`arm64`) e Intel (`x64`) com empacotamento Universal `.dmg`, VideoToolbox, ScreenCaptureKit/CoreAudio system audio loopback, mute/Play-Pause via `osascript`, ícone `.icns`, `entitlements.mac.plist` e pipeline CI em `macos-latest`.
 
 ---
 
 ## 🛠️ Como Compilar do Código-Fonte
 
 <details>
-<summary><b>1. Desktop Sender (Windows & Linux — Node.js / Electron 45)</b></summary>
+<summary><b>1. Desktop Sender (Windows, macOS & Linux — Node.js / Electron 45)</b></summary>
 
 ```bash
 cd desktop-sender
@@ -147,6 +168,9 @@ npm run check
 
 # Build Windows (.exe Setup, Portátil e dir)
 npm run dist:win
+
+# Build macOS (Universal .dmg arm64 + x64 — requer macOS)
+npm run dist:mac
 
 # Build Linux (.AppImage, .deb e .tar.gz)
 npm run dist:linux

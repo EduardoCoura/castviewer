@@ -6,7 +6,7 @@ on:
       release_tag:
         description: 'Release tag to attach Linux packages to'
         required: true
-        default: 'v1.0.0'
+        default: 'v1.1.0'
       upload_to_release:
         description: 'Upload generated binaries to GitHub Release'
         required: true
@@ -81,12 +81,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
         run: |
-          if gh release view "$TARGET_TAG" >/dev/null 2>&1; then
-            gh release upload "$TARGET_TAG" \
-              desktop-sender/dist/*.AppImage \
-              desktop-sender/dist/*.deb \
-              desktop-sender/dist/*.tar.gz \
-              --clobber
-          else
-            echo "Release $TARGET_TAG not found yet; skipping automatic upload."
+          if ! gh release view "$TARGET_TAG" >/dev/null 2>&1; then
+            gh release create "$TARGET_TAG" --title "CastViewer $TARGET_TAG" --generate-notes || true
           fi
+          gh release upload "$TARGET_TAG" \
+            desktop-sender/dist/*.AppImage \
+            desktop-sender/dist/*.deb \
+            desktop-sender/dist/*.tar.gz \
+            --clobber
