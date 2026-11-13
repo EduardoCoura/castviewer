@@ -546,6 +546,7 @@ Java_com_firecast_local_airplay_AirPlayNativeBridge_nativeSetDisplaySize(
     raop_set_plist(ctx->raop, "width", width);
     raop_set_plist(ctx->raop, "height", height);
     raop_set_plist(ctx->raop, "refreshRate", fps);
+    raop_set_plist(ctx->raop, "maxFPS", fps);
 }
 
 extern "C"

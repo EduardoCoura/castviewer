@@ -125,22 +125,22 @@ class AirPlayNsdAdvertiser(context: Context) {
 
         val listener = object : NsdManager.RegistrationListener {
             override fun onServiceRegistered(serviceInfo: NsdServiceInfo) {
-                Log.i(TAG, "Published mDNS service ${serviceInfo.serviceType} name='${serviceInfo.serviceName}' port=$port")
+                Log.i(TAG, "Published mDNS service $type name='${serviceInfo.serviceName}' port=$port")
             }
 
             override fun onRegistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-                Log.e(TAG, "Failed to register ${serviceInfo.serviceType} (${serviceInfo.serviceName}) error=$errorCode")
+                Log.e(TAG, "Failed to register $type (${serviceInfo.serviceName}) error=$errorCode")
                 synchronized(lock) {
                     clearListener(this)
                 }
             }
 
             override fun onServiceUnregistered(serviceInfo: NsdServiceInfo) {
-                Log.i(TAG, "Unpublished mDNS service ${serviceInfo.serviceType} (${serviceInfo.serviceName})")
+                Log.i(TAG, "Unpublished mDNS service $type (${serviceInfo.serviceName})")
             }
 
             override fun onUnregistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-                Log.w(TAG, "Unregister failed for ${serviceInfo.serviceType} error=$errorCode")
+                Log.w(TAG, "Unregister failed for $type error=$errorCode")
             }
         }
 

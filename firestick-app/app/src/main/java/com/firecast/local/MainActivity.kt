@@ -33,6 +33,7 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.roundToInt
 
 /**
  * Main Activity for CastViewer Fire TV / Android TV Receiver.
@@ -1061,7 +1062,7 @@ class MainActivity : AppCompatActivity() {
                     display?.refreshRate
                 } else {
                     windowManager.defaultDisplay?.refreshRate
-                })?.toInt()?.coerceIn(30, 60) ?: 60
+                })?.roundToInt()?.coerceIn(30, 60) ?: 60
                 publishedAirPlayName = friendlyName
                 airPlayReceiverController.start(friendlyName, airplayW, airplayH, refreshRate)
             }

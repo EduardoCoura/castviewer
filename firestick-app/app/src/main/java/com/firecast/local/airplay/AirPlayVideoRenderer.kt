@@ -50,6 +50,7 @@ class AirPlayVideoRenderer(
                 var fallbackHardware: String? = null
                 for (info in infos) {
                     if (info.isEncoder) continue
+                    if (info.name.lowercase().endsWith(".secure")) continue
                     if (!info.supportedTypes.any { it.equals(mimeType, ignoreCase = true) }) continue
                     if (isSoftwareDecoderName(info.name)) continue
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
