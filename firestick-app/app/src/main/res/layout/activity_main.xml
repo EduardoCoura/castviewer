@@ -16,6 +16,16 @@
         android:visibility="gone"
         tools:visibility="gone" />
 
+    <!-- 1B. DIRECT-TO-SURFACE HARDWARE AIRPLAY VIDEO RENDERER -->
+    <SurfaceView
+        android:id="@+id/airplaySurfaceView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:keepScreenOn="true"
+        android:visibility="gone"
+        tools:visibility="gone" />
+
     <!-- 2. STREAMING HUD OVERLAY (Top-Left Sleek Pill, Auto-Fading after 3.5s) -->
     <LinearLayout
         android:id="@+id/streamingHudLayout"
@@ -254,7 +264,7 @@
             android:ellipsize="end"
             android:fontFamily="@font/barlow_condensed"
             android:singleLine="true"
-            android:text="Mesmo Wi-Fi · Abra o CastViewer no PC · Clique em Transmitir"
+            android:text="@string/quick_guide_banner"
             android:textColor="#63636E"
             android:textSize="12sp" />
 

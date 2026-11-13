@@ -8,7 +8,10 @@
 
     <!-- Apple TV / AirPlay Minimalist Waiting Screen -->
     <string name="status_ready_prefix">Pronto para espelhar · %1$s</string>
-    <string name="hint_start_computer">Abra o CastViewer no computador para iniciar.</string>
+    <string name="hint_start_computer">Abra o CastViewer no computador ou use AirPlay no iPhone/iPad.</string>
+    <string name="quick_guide_banner">Mesmo Wi-Fi · PC/Linux via CastViewer ou iPhone/iPad via AirPlay</string>
+    <string name="airplay_hud_title">AirPlay • iPhone/iPad</string>
+    <string name="airplay_pin_message">PIN AirPlay: %1$s</string>
     <string name="qr_code_desc">Código QR de pareamento CastViewer</string>
 
     <!-- TV Streaming Overlay & Remote Instructions -->

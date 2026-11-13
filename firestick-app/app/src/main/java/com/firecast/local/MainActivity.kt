@@ -19,10 +19,13 @@ import android.view.View
 import android.view.WindowManager
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.PathInterpolator
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
+import com.firecast.local.airplay.AirPlayAspectMath
+import com.firecast.local.airplay.AirPlayReceiverController
 import com.firecast.local.databinding.ActivityMainBinding
 import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
@@ -48,9 +51,19 @@ class MainActivity : AppCompatActivity() {
     private val cinematicIntroView: CinematicIntroView
         get() = binding.splashOverlay
 
+    private enum class StreamTransport {
+        NONE,
+        WEBRTC,
+        AIRPLAY
+    }
+
     private lateinit var nsdAdvertiser: NsdAdvertiser
     private lateinit var signalingServer: SignalingServer
     private lateinit var webRtcReceiver: WebRtcReceiver
+    private lateinit var airPlayReceiverController: AirPlayReceiverController
+    private var publishedAirPlayName: String = ""
+    private var lastAirPlayVideoWidth: Int = 1920
+    private var lastAirPlayVideoHeight: Int = 1080
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val clockExecutor = Executors.newSingleThreadExecutor()
@@ -67,6 +80,7 @@ class MainActivity : AppCompatActivity() {
     @Volatile
     private var hasNetworkResolvedClock: Boolean = false
 
+    private var activeStreamTransport = StreamTransport.NONE
     private var isStreamingActive = false
     private var isTakeoverInProgress = false
     private var isStreamPaused = false
@@ -314,6 +328,20 @@ class MainActivity : AppCompatActivity() {
         webRtcReceiver = WebRtcReceiver(this)
 
         webRtcReceiver.setupRenderer(binding.surfaceViewRenderer)
+        airPlayReceiverController = AirPlayReceiverController(
+            context = this,
+            surfaceView = binding.airplaySurfaceView,
+            listener = airPlayListener
+        )
+        binding.rootContainer.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            val w = right - left
+            val h = bottom - top
+            val oldW = oldRight - oldLeft
+            val oldH = oldBottom - oldTop
+            if ((w != oldW || h != oldH) && activeStreamTransport == StreamTransport.AIRPLAY) {
+                updateAirPlaySurfaceBounds(lastAirPlayVideoWidth, lastAirPlayVideoHeight)
+            }
+        }
 
         setupListeners()
         setupBackNavigation()
@@ -370,6 +398,7 @@ class MainActivity : AppCompatActivity() {
             signalingServer.stop(500)
         } catch (_: Exception) {}
         nsdAdvertiser.stop()
+        airPlayReceiverController.stop()
         webRtcReceiver.dispose()
     }
 
@@ -678,16 +707,100 @@ class MainActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
+    private val airPlayListener = object : AirPlayReceiverController.Listener {
+        override fun onAirPlayReady(serviceName: String, port: Int) {
+            Log.i(TAG, "AirPlay receiver ready: name='$serviceName' port=$port")
+        }
+
+        override fun onAirPlayUnavailable(reason: String) {
+            Log.w(TAG, "AirPlay unavailable on this runtime: $reason")
+        }
+
+        override fun onAirPlaySessionStarted() {
+            if (isDestroyed || isFinishing) return
+            if (activeStreamTransport == StreamTransport.AIRPLAY && isStreamingActive) return
+
+            if (activeStreamTransport == StreamTransport.WEBRTC ||
+                isTakeoverInProgress ||
+                signalingServer.isSessionActive() ||
+                webRtcReceiver.hasActivePeerConnection()
+            ) {
+                isTakeoverInProgress = false
+                mainHandler.removeCallbacks(takeoverOfferTimeoutRunnable)
+                webRtcReceiver.stopCurrentSession()
+                signalingServer.disconnectActiveSession("Nova transmissão AirPlay iniciada")
+            }
+
+            cancelIntroAnimation()
+            ensureNormalAudioMode()
+            requestStreamAudioFocus()
+            isStreamPaused = false
+            val airPlayTitle = getString(R.string.airplay_hud_title)
+            activeSenderName = airPlayTitle
+            switchToStreamingMode(airPlayTitle, StreamTransport.AIRPLAY)
+        }
+
+        override fun onAirPlayFirstFrameRendered() {
+            if (isDestroyed || isFinishing) return
+            if (activeStreamTransport != StreamTransport.AIRPLAY) {
+                onAirPlaySessionStarted()
+            } else {
+                ensureNormalAudioMode()
+                requestStreamAudioFocus()
+                binding.airplaySurfaceView.isVisible = true
+            }
+        }
+
+        override fun onAirPlayVideoDimensionsChanged(width: Int, height: Int) {
+            lastAirPlayVideoWidth = width
+            lastAirPlayVideoHeight = height
+            if (activeStreamTransport == StreamTransport.AIRPLAY) {
+                updateAirPlaySurfaceBounds(width, height)
+            }
+        }
+
+        override fun onAirPlaySessionEnded() {
+            if (isDestroyed || isFinishing) return
+            if (activeStreamTransport == StreamTransport.AIRPLAY) {
+                disconnectAndReturnToWaitingScreen("Espelhamento AirPlay encerrado")
+            }
+        }
+
+        override fun onAirPlayPinRequired(pin: String) {
+            if (isDestroyed || isFinishing) return
+            val pinMsg = getString(R.string.airplay_pin_message, pin)
+            Toast.makeText(this@MainActivity, pinMsg, Toast.LENGTH_LONG).show()
+            binding.tvStatusRow.text = pinMsg
+        }
+    }
+
+    private fun updateAirPlaySurfaceBounds(videoWidth: Int, videoHeight: Int) {
+        val containerW = binding.rootContainer.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+        val containerH = binding.rootContainer.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
+        val bounds = AirPlayAspectMath.computeFitBounds(containerW, containerH, videoWidth, videoHeight)
+        val lp = (binding.airplaySurfaceView.layoutParams as? FrameLayout.LayoutParams)
+            ?: FrameLayout.LayoutParams(bounds.width, bounds.height, Gravity.CENTER)
+        if (lp.width != bounds.width || lp.height != bounds.height || lp.gravity != Gravity.CENTER) {
+            lp.width = bounds.width
+            lp.height = bounds.height
+            lp.gravity = Gravity.CENTER
+            binding.airplaySurfaceView.layoutParams = lp
+        }
+    }
+
     /**
-     * Applies Play/Pause state on the Fire TV receiver (freezing/resuming the 1080p frame on
-     * SurfaceViewRenderer and muting/unmuting remote audio), optionally notifies the PC sender
-     * over WebSocket, and plays the Minimalist Kinetic Pause/Resume animation.
+     * Applies Play/Pause state on the Fire TV receiver (freezing/resuming WebRTC video & muting audio
+     * on WebRTC or AirPlay), optionally notifies WebRTC sender, and plays the kinetic badge animation.
      */
     private fun applyStreamPauseState(paused: Boolean, notifyRemote: Boolean) {
         isStreamPaused = paused
-        webRtcReceiver.setStreamPaused(paused)
-        if (notifyRemote) {
-            signalingServer.sendRemotePauseState(paused)
+        if (activeStreamTransport == StreamTransport.AIRPLAY) {
+            airPlayReceiverController.setMuted(paused)
+        } else {
+            webRtcReceiver.setStreamPaused(paused)
+            if (notifyRemote) {
+                signalingServer.sendRemotePauseState(paused)
+            }
         }
         cinematicIntroView.playPauseStateAnimation(paused)
         showStreamingHud(activeSenderName ?: "Dispositivo Local")
@@ -715,7 +828,9 @@ class MainActivity : AppCompatActivity() {
                         PeerConnection.PeerConnectionState.DISCONNECTED,
                         PeerConnection.PeerConnectionState.FAILED,
                         PeerConnection.PeerConnectionState.CLOSED -> {
-                            if (isStreamingActive || isTakeoverInProgress || webRtcReceiver.hasActivePeerConnection()) {
+                            if (activeStreamTransport != StreamTransport.AIRPLAY &&
+                                (isStreamingActive || isTakeoverInProgress || webRtcReceiver.hasActivePeerConnection())
+                            ) {
                                 disconnectAndReturnToWaitingScreen("Conexão WebRTC finalizada")
                             }
                         }
@@ -739,6 +854,7 @@ class MainActivity : AppCompatActivity() {
             override fun onError(sessionGeneration: Long, message: String) {
                 mainHandler.post {
                     if (!webRtcReceiver.isCurrentGeneration(sessionGeneration)) return@post
+                    if (activeStreamTransport == StreamTransport.AIRPLAY) return@post
                     Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
                     disconnectAndReturnToWaitingScreen("Erro WebRTC: $message")
                 }
@@ -749,6 +865,13 @@ class MainActivity : AppCompatActivity() {
         signalingServer.listener = object : SignalingServer.Listener {
             override fun onOfferReceived(sdp: String, senderName: String) {
                 mainHandler.post {
+                    if (activeStreamTransport == StreamTransport.AIRPLAY ||
+                        airPlayReceiverController.isSessionActive()
+                    ) {
+                        airPlayReceiverController.disconnectActiveSession()
+                        binding.airplaySurfaceView.isVisible = false
+                    }
+                    activeStreamTransport = StreamTransport.WEBRTC
                     isTakeoverInProgress = false
                     mainHandler.removeCallbacks(takeoverOfferTimeoutRunnable)
                     cancelIntroAnimation()
@@ -757,7 +880,7 @@ class MainActivity : AppCompatActivity() {
                     isStreamPaused = false
                     activeSenderName = senderName
                     binding.tvStatusRow.text = "Conectando com $senderName…"
-                    switchToStreamingMode(senderName)
+                    switchToStreamingMode(senderName, StreamTransport.WEBRTC)
                     webRtcReceiver.handleOffer(sdp) { answerSdp ->
                         signalingServer.sendAnswer(answerSdp)
                     }
@@ -843,13 +966,17 @@ class MainActivity : AppCompatActivity() {
 
             override fun onByeReceived() {
                 mainHandler.post {
-                    disconnectAndReturnToWaitingScreen("Cliente desconectou")
+                    if (activeStreamTransport != StreamTransport.AIRPLAY) {
+                        disconnectAndReturnToWaitingScreen("Cliente desconectou")
+                    }
                 }
             }
 
             override fun onSessionDisconnected(reason: String) {
                 mainHandler.post {
-                    disconnectAndReturnToWaitingScreen(reason)
+                    if (activeStreamTransport != StreamTransport.AIRPLAY) {
+                        disconnectAndReturnToWaitingScreen(reason)
+                    }
                 }
             }
 
@@ -923,8 +1050,21 @@ class MainActivity : AppCompatActivity() {
             binding.dotStatus.isVisible = true
             binding.tvWsAddress.text = ""
 
-            // Register mDNS (_firecast._tcp.)
+            // Register mDNS (_firecast._tcp.) and Apple AirPlay (_airplay._tcp. & _raop._tcp.)
             nsdAdvertiser.start(SignalingServer.DEFAULT_PORT, friendlyName)
+            if (!airPlayReceiverController.isRunning() || publishedAirPlayName != friendlyName) {
+                val dm = resources.displayMetrics
+                val airplayW = maxOf(dm.widthPixels, dm.heightPixels).coerceIn(1280, 1920)
+                val airplayH = minOf(dm.widthPixels, dm.heightPixels).coerceIn(720, 1080)
+                @Suppress("DEPRECATION")
+                val refreshRate = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    display?.refreshRate
+                } else {
+                    windowManager.defaultDisplay?.refreshRate
+                })?.toInt()?.coerceIn(30, 60) ?: 60
+                publishedAirPlayName = friendlyName
+                airPlayReceiverController.start(friendlyName, airplayW, airplayH, refreshRate)
+            }
 
             if (!isStreamingActive && !isTakeoverInProgress) {
                 startQrRotation()
@@ -933,6 +1073,11 @@ class MainActivity : AppCompatActivity() {
             }
         } else {
             stopQrRotation()
+            nsdAdvertiser.stop()
+            if (airPlayReceiverController.isRunning()) {
+                airPlayReceiverController.stop()
+                publishedAirPlayName = ""
+            }
             binding.tvStatusRow.text = getString(R.string.network_disconnected)
             binding.dotStatus.isVisible = false
             binding.tvWsAddress.text = ""
@@ -943,13 +1088,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showStreamingUi() {
-        switchToStreamingMode(activeSenderName ?: "Dispositivo Local")
+        val transport = if (activeStreamTransport == StreamTransport.NONE) {
+            StreamTransport.WEBRTC
+        } else {
+            activeStreamTransport
+        }
+        switchToStreamingMode(activeSenderName ?: "Dispositivo Local", transport)
     }
 
-    private fun switchToStreamingMode(senderName: String) {
+    private fun switchToStreamingMode(
+        senderName: String,
+        transport: StreamTransport = StreamTransport.WEBRTC
+    ) {
         cancelIntroAnimation()
-        val wasAlreadyStreaming = isStreamingActive
+        val wasAlreadyStreaming = isStreamingActive && activeStreamTransport == transport
         isStreamingActive = true
+        activeStreamTransport = transport
 
         stopQrRotation()
         stopWaitingClock()
@@ -978,15 +1132,26 @@ class MainActivity : AppCompatActivity() {
             binding.waitingContainer.isVisible = false
         }
 
-        webRtcReceiver.setVideoVisible(true)
-        if (!isStreamPaused) {
-            binding.surfaceViewRenderer.disableFpsReduction()
+        if (transport == StreamTransport.AIRPLAY) {
+            webRtcReceiver.setVideoVisible(false)
+            updateAirPlaySurfaceBounds(lastAirPlayVideoWidth, lastAirPlayVideoHeight)
+            binding.airplaySurfaceView.isVisible = true
+        } else {
+            binding.airplaySurfaceView.isVisible = false
+            webRtcReceiver.setVideoVisible(true)
+            if (!isStreamPaused) {
+                binding.surfaceViewRenderer.disableFpsReduction()
+            }
         }
         enableImmersiveMode()
 
         if (!wasAlreadyStreaming) {
             isStreamPaused = false
-            webRtcReceiver.setStreamPaused(false)
+            if (transport == StreamTransport.AIRPLAY) {
+                airPlayReceiverController.setMuted(false)
+            } else {
+                webRtcReceiver.setStreamPaused(false)
+            }
             cinematicIntroView.playCastConnectAnimation(senderName)
         }
 
@@ -1040,6 +1205,7 @@ class MainActivity : AppCompatActivity() {
         binding.streamingHudLayout.animate().cancel()
         binding.streamingHudLayout.isVisible = false
         webRtcReceiver.setVideoVisible(false)
+        binding.airplaySurfaceView.isVisible = false
 
         if (staggeredReveal) {
             stageWaitingChildrenHidden()
@@ -1060,13 +1226,16 @@ class MainActivity : AppCompatActivity() {
         mainHandler.removeCallbacks(takeoverOfferTimeoutRunnable)
         val hasRecoverableState = isStreamingActive ||
             isTakeoverInProgress ||
+            activeStreamTransport != StreamTransport.NONE ||
             !binding.waitingContainer.isVisible ||
-            signalingServer.isSessionActive()
+            signalingServer.isSessionActive() ||
+            airPlayReceiverController.isSessionActive()
         if (!hasRecoverableState) return
 
         isTakeoverInProgress = false
         isStreamingActive = false
         isStreamPaused = false
+        activeStreamTransport = StreamTransport.NONE
         activeSenderName = null
         mainHandler.removeCallbacks(hideHudRunnable)
 
@@ -1074,6 +1243,10 @@ class MainActivity : AppCompatActivity() {
         ensureNormalAudioMode()
         webRtcReceiver.stopCurrentSession()
         signalingServer.disconnectActiveSession(reason)
+        if (airPlayReceiverController.isSessionActive()) {
+            airPlayReceiverController.disconnectActiveSession()
+        }
+        binding.airplaySurfaceView.isVisible = false
 
         switchToWaitingMode(cancelOverlayAnimations = false, staggeredReveal = true)
         cinematicIntroView.playCastDisconnectAnimation(
@@ -1089,6 +1262,11 @@ class MainActivity : AppCompatActivity() {
     private fun resetReceiverForIncomingTakeover(newSenderName: String) {
         cancelIntroAnimation()
         cinematicIntroView.cancelAllAnimations()
+        if (activeStreamTransport == StreamTransport.AIRPLAY || airPlayReceiverController.isSessionActive()) {
+            airPlayReceiverController.disconnectActiveSession()
+            binding.airplaySurfaceView.isVisible = false
+        }
+        activeStreamTransport = StreamTransport.WEBRTC
         isTakeoverInProgress = true
         isStreamingActive = false
         isStreamPaused = false
